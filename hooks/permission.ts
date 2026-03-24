@@ -3,14 +3,8 @@
 // ---------------------------------------------------------------------------
 
 export interface PermissionHookDeps {
-  getState: (
-    sessionID: string,
-  ) =>
-    | { mode: "DISABLED" | "ENABLED" }
-    | undefined;
-  getPermissionMode: (
-    sessionID: string,
-  ) => "allow-all" | "limited" | undefined;
+  getState: (sessionID: string) => { mode: "DISABLED" | "ENABLED" } | undefined;
+  getPermissionMode: (sessionID: string) => "allow-all" | "limited" | undefined;
   onPermissionDenied?: (
     sessionID: string,
     permission: {
@@ -40,10 +34,7 @@ interface PermissionOutput {
 export function createPermissionHook(
   deps: PermissionHookDeps,
 ): (input: PermissionInput, output: PermissionOutput) => Promise<void> {
-  return async (
-    input: PermissionInput,
-    output: PermissionOutput,
-  ): Promise<void> => {
+  return async (input: PermissionInput, output: PermissionOutput): Promise<void> => {
     const state = deps.getState(input.sessionID);
 
     if (!state || state.mode !== "ENABLED") {

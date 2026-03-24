@@ -8,9 +8,7 @@ function requiredOpenItemsRemain(state: ExtendedState): boolean {
 }
 
 function requiredBlockedItemsRemain(state: ExtendedState): boolean {
-  return state.plan_state.steps.some(
-    (step) => step.required && step.status === "blocked",
-  );
+  return state.plan_state.steps.some((step) => step.required && step.status === "blocked");
 }
 
 function inferPlanProgress(state: ExtendedState): ExtendedState["plan_state"] {

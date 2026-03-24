@@ -48,9 +48,7 @@ export function formatUsageMetadata(usage: UsageMetadata | null | undefined): st
   return parts.join("; ");
 }
 
-export function summarizeAutopilotState(
-  state: ExtendedState | null | undefined,
-): string {
+export function summarizeAutopilotState(state: ExtendedState | null | undefined): string {
   if (!state) {
     return "Autopilot is idle.";
   }

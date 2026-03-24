@@ -65,13 +65,9 @@ function createTrustState(trustedPaths: string[]): TrustState {
   };
 }
 
-function createContextState(
-  remainingBudget: number | null,
-  threshold: number,
-): ContextState {
+function createContextState(remainingBudget: number | null, threshold: number): ContextState {
   const resolvedBudget = remainingBudget ?? null;
-  const compactionNeeded =
-    resolvedBudget !== null ? resolvedBudget <= threshold : false;
+  const compactionNeeded = resolvedBudget === null ? false : resolvedBudget <= threshold;
 
   return {
     remaining_budget: resolvedBudget,

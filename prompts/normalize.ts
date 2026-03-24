@@ -8,8 +8,5 @@ export function normalizeMaxContinues(value: unknown): number {
     return AUTOPILOT_DEFAULT_MAX_CONTINUES;
   }
 
-  return Math.min(
-    AUTOPILOT_MAX_CONTINUES_HARD_LIMIT,
-    Math.max(1, Math.floor(numeric)),
-  );
+  return Math.min(AUTOPILOT_MAX_CONTINUES_HARD_LIMIT, Math.max(1, Math.floor(numeric)));
 }

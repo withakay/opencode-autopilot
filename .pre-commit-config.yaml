@@ -1,0 +1,16 @@
+repos:
+  - repo: local
+    hooks:
+      - id: biome-check
+        name: Biome check
+        entry: bunx biome check --write
+        language: system
+        types: [ts]
+        pass_filenames: true
+
+      - id: typecheck
+        name: TypeScript check
+        entry: tsc --noEmit
+        language: system
+        types: [ts]
+        pass_filenames: false

@@ -157,10 +157,7 @@ export function compactionAllowed(state: ExtendedState): boolean {
   return remainingBudget === null || remainingBudget >= 0;
 }
 
-export function isAdmissible(
-  state: ExtendedState,
-  action: AdmissibleAction,
-): boolean {
+export function isAdmissible(state: ExtendedState, action: AdmissibleAction): boolean {
   if (action.kind === "NO_OP") {
     return true;
   }

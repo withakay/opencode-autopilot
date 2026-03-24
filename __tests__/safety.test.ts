@@ -1,22 +1,17 @@
 import { describe, expect, test } from "bun:test";
-import { reduce } from "../reducer/index.ts";
 import { isAdmissible } from "../reducer/guards.ts";
-import { createInitialState, createSessionState } from "../state/factory.ts";
+import { reduce } from "../reducer/index.ts";
+import type { Effect } from "../types/index.ts";
 import {
-  createTestState,
+  createApprovalDeniedEvent,
   createEnabledState,
-  createStoppedState,
-  createUserInputEvent,
-  createToolResultEvent,
-  createToolErrorEvent,
   createInterruptEvent,
   createResumeEvent,
-  createApprovalGrantedEvent,
-  createApprovalDeniedEvent,
-  createTrustGrantedEvent,
+  createStoppedState,
+  createToolErrorEvent,
   createTrustDeniedEvent,
+  createUserInputEvent,
 } from "./helpers.ts";
-import type { ExtendedState, Effect, ForegroundAction } from "../types/index.ts";
 
 // ---------------------------------------------------------------------------
 // S1 — No side effect without admissibility check
@@ -188,10 +183,7 @@ describe("S4 — blocked/stopped states have explicit stop_reason", () => {
     });
 
     const result = reduce(state, createUserInputEvent());
-    if (
-      result.nextState.phase === "BLOCKED" ||
-      result.nextState.phase === "STOPPED"
-    ) {
+    if (result.nextState.phase === "BLOCKED" || result.nextState.phase === "STOPPED") {
       expect(result.nextState.stop_reason).not.toBeNull();
     }
   });
@@ -251,9 +243,11 @@ describe("S6 — no uncontrolled livelock (non-progress counter enforced)", () =
     // Should be BLOCKED or STOPPED with NON_PROGRESS_LIMIT
     expect(["BLOCKED", "STOPPED"]).toContain(result.nextState.phase);
     if (result.nextState.stop_reason) {
-      expect(["NON_PROGRESS_LIMIT", "RETRY_EXHAUSTED", "AMBIGUOUS_STATE_REQUIRES_ESCALATION"]).toContain(
-        result.nextState.stop_reason,
-      );
+      expect([
+        "NON_PROGRESS_LIMIT",
+        "RETRY_EXHAUSTED",
+        "AMBIGUOUS_STATE_REQUIRES_ESCALATION",
+      ]).toContain(result.nextState.stop_reason);
     }
   });
 });
@@ -300,14 +294,7 @@ describe("S7 — STOPPED is quiescent unless resumed", () => {
 
 describe("S8 — interrupt preemption", () => {
   test("INTERRUPT from any phase leads to STOPPED", () => {
-    const phases = [
-      "OBSERVE",
-      "ORIENT",
-      "DECIDE",
-      "EXECUTE",
-      "EVALUATE",
-      "RECOVER",
-    ] as const;
+    const phases = ["OBSERVE", "ORIENT", "DECIDE", "EXECUTE", "EVALUATE", "RECOVER"] as const;
 
     for (const phase of phases) {
       const state = createEnabledState({ phase });
@@ -353,18 +340,12 @@ describe("S9 — state preserved across risky effects for safe resumability", ()
     const result = reduce(state, createUserInputEvent());
 
     // Check if PERSIST_SNAPSHOT is among the effects when there's a risky action
-    const snapshotEffects = result.effects.filter(
-      (e) => e.kind === "PERSIST_SNAPSHOT",
-    );
-    const runToolEffects = result.effects.filter(
-      (e) => e.kind === "RUN_TOOL",
-    );
+    const snapshotEffects = result.effects.filter((e) => e.kind === "PERSIST_SNAPSHOT");
+    const runToolEffects = result.effects.filter((e) => e.kind === "RUN_TOOL");
 
     // If a risky tool action was dispatched, a snapshot should precede it
     if (runToolEffects.length > 0) {
-      const riskyTools = runToolEffects.filter(
-        (e) => e.kind === "RUN_TOOL" && e.risky,
-      );
+      const riskyTools = runToolEffects.filter((e) => e.kind === "RUN_TOOL" && e.risky);
       if (riskyTools.length > 0) {
         expect(snapshotEffects.length).toBeGreaterThan(0);
       }

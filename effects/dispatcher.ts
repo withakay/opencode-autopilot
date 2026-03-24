@@ -75,9 +75,7 @@ interface DispatchHandlers {
   requestApproval?: (effect: RequestApprovalEffect) => Promise<ApprovalDecision>;
   requestTrust?: (effect: RequestTrustEffect) => Promise<TrustDecision>;
   compactContext?: (effect: CompactContextEffect) => Promise<CompactionResult>;
-  waitForBackgroundTask?: (
-    effect: WaitForBackgroundTaskEffect,
-  ) => Promise<BackgroundWaitResult>;
+  waitForBackgroundTask?: (effect: WaitForBackgroundTaskEffect) => Promise<BackgroundWaitResult>;
   emitFinalResponse?: (
     effect: EmitFinalResponseEffect,
   ) => Promise<{ summary?: string; metadata?: Record<string, unknown> }>;
@@ -158,16 +156,15 @@ export async function dispatchEffect(
         },
       );
     case "RUN_TOOL": {
-      const result =
-        (await context.handlers?.runTool?.(effect)) ?? {
-          ok: true,
-          summary: effect.summary,
-          output_ref: null,
-          changed_paths: effect.target_paths,
-          started_at: null,
-          completed_at: now(),
-          metadata: effect.metadata,
-        };
+      const result = (await context.handlers?.runTool?.(effect)) ?? {
+        ok: true,
+        summary: effect.summary,
+        output_ref: null,
+        changed_paths: effect.target_paths,
+        started_at: null,
+        completed_at: now(),
+        metadata: effect.metadata,
+      };
 
       if (result.ok) {
         return createEvent(
@@ -215,13 +212,12 @@ export async function dispatchEffect(
       );
     }
     case "REQUEST_APPROVAL": {
-      const decision =
-        (await context.handlers?.requestApproval?.(effect)) ?? {
-          granted: true,
-          approved_until: null,
-          session_scoped: true,
-          metadata: effect.metadata,
-        };
+      const decision = (await context.handlers?.requestApproval?.(effect)) ?? {
+        granted: true,
+        approved_until: null,
+        session_scoped: true,
+        metadata: effect.metadata,
+      };
 
       return decision.granted
         ? createEvent(
@@ -257,12 +253,11 @@ export async function dispatchEffect(
           );
     }
     case "REQUEST_TRUST": {
-      const decision =
-        (await context.handlers?.requestTrust?.(effect)) ?? {
-          granted: true,
-          scope: effect.scope,
-          metadata: effect.metadata,
-        };
+      const decision = (await context.handlers?.requestTrust?.(effect)) ?? {
+        granted: true,
+        scope: effect.scope,
+        metadata: effect.metadata,
+      };
 
       return decision.granted
         ? createEvent(
@@ -295,13 +290,12 @@ export async function dispatchEffect(
           );
     }
     case "COMPACT_CONTEXT": {
-      const result =
-        (await context.handlers?.compactContext?.(effect)) ?? {
-          remaining_budget: Math.max(context.state.context_state.threshold * 2, 1),
-          threshold: context.state.context_state.threshold,
-          compaction_recommended: false,
-          metadata: effect.metadata,
-        };
+      const result = (await context.handlers?.compactContext?.(effect)) ?? {
+        remaining_budget: Math.max(context.state.context_state.threshold * 2, 1),
+        threshold: context.state.context_state.threshold,
+        compaction_recommended: false,
+        metadata: effect.metadata,
+      };
 
       return createEvent(
         "CONTEXT_LOW",
@@ -320,13 +314,12 @@ export async function dispatchEffect(
       );
     }
     case "WAIT_FOR_BACKGROUND_TASK": {
-      const result =
-        (await context.handlers?.waitForBackgroundTask?.(effect)) ?? {
-          task_status: "completed",
-          summary: null,
-          output_ref: null,
-          metadata: effect.metadata,
-        };
+      const result = (await context.handlers?.waitForBackgroundTask?.(effect)) ?? {
+        task_status: "completed",
+        summary: null,
+        output_ref: null,
+        metadata: effect.metadata,
+      };
 
       return createEvent(
         "BACKGROUND_TASK_UPDATED",
@@ -346,11 +339,10 @@ export async function dispatchEffect(
       );
     }
     case "EMIT_FINAL_RESPONSE": {
-      const result =
-        (await context.handlers?.emitFinalResponse?.(effect)) ?? {
-          summary: effect.summary,
-          metadata: effect.metadata,
-        };
+      const result = (await context.handlers?.emitFinalResponse?.(effect)) ?? {
+        summary: effect.summary,
+        metadata: effect.metadata,
+      };
 
       return createEvent(
         "TOOL_RESULT",
@@ -375,10 +367,9 @@ export async function dispatchEffect(
     }
     case "PERSIST_SNAPSHOT": {
       persistSnapshot(context.state);
-      const result =
-        (await context.handlers?.persistSnapshot?.(effect, context.state)) ?? {
-          metadata: effect.metadata,
-        };
+      const result = (await context.handlers?.persistSnapshot?.(effect, context.state)) ?? {
+        metadata: effect.metadata,
+      };
 
       return createEvent(
         "TOOL_RESULT",

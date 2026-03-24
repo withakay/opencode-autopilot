@@ -58,12 +58,12 @@ function normalizeError(
 
   const result: { name?: string; data?: { message?: string } } = {};
 
-  if (isString(error["name"])) {
-    result.name = error["name"];
+  if (isString(error.name)) {
+    result.name = error.name;
   }
 
-  if (isObject(error["data"]) && isString(error["data"]["message"])) {
-    result.data = { message: error["data"]["message"] };
+  if (isObject(error.data) && isString(error.data.message)) {
+    result.data = { message: error.data.message };
   }
 
   return result;
@@ -81,28 +81,19 @@ interface SdkEvent {
 export function createEventHandler(
   deps: EventHandlerDeps,
 ): (input: { event: SdkEvent }) => Promise<void> {
-  const {
-    getState,
-    deleteState,
-    sessionCache,
-    getTracking,
-    onSessionIdle,
-    onSessionError,
-  } = deps;
+  const { getState, deleteState, sessionCache, getTracking, onSessionIdle, onSessionError } = deps;
 
-  return async function handleEvent(input: {
-    event: SdkEvent;
-  }): Promise<void> {
+  return async function handleEvent(input: { event: SdkEvent }): Promise<void> {
     const { event } = input;
 
     switch (event.type) {
       case "message.updated": {
-        const info = event.properties["info"];
+        const info = event.properties.info;
         if (!isObject(info)) return;
 
-        const sessionID = info["sessionID"];
-        const messageID = info["id"];
-        const role = info["role"];
+        const sessionID = info.sessionID;
+        const messageID = info.id;
+        const role = info.role;
 
         if (!isString(sessionID) || !isString(messageID) || !isString(role)) {
           return;
@@ -112,25 +103,22 @@ export function createEventHandler(
           sessionCache.setRole(sessionID, messageID, role);
         }
 
-        if ("agent" in info && isString(info["agent"])) {
-          sessionCache.setAgent(sessionID, messageID, info["agent"]);
+        if ("agent" in info && isString(info.agent)) {
+          sessionCache.setAgent(sessionID, messageID, info.agent);
         }
 
         if (role === "assistant") {
           const state = getState(sessionID);
           const tracking = getTracking(sessionID);
 
-          if (state && tracking && tracking.awaitingWorkerReply) {
-            const agent =
-              "agent" in info && isString(info["agent"])
-                ? info["agent"]
-                : undefined;
+          if (state && tracking?.awaitingWorkerReply) {
+            const agent = "agent" in info && isString(info.agent) ? info.agent : undefined;
 
             if (agent === state.worker_agent) {
               tracking.lastAssistantMessageID = messageID;
               tracking.lastUsage = {
-                tokens: info["tokens"],
-                cost: info["cost"],
+                tokens: info.tokens,
+                cost: info.cost,
               };
             }
           }
@@ -139,44 +127,33 @@ export function createEventHandler(
       }
 
       case "message.part.updated": {
-        const part = event.properties["part"];
+        const part = event.properties.part;
         if (!isObject(part)) return;
 
         if (
-          part["type"] !== "text" ||
-          !isString(part["sessionID"]) ||
-          !isString(part["messageID"]) ||
-          !isString(part["id"]) ||
-          !isString(part["text"])
+          part.type !== "text" ||
+          !isString(part.sessionID) ||
+          !isString(part.messageID) ||
+          !isString(part.id) ||
+          !isString(part.text)
         ) {
           return;
         }
 
-        const state = getState(part["sessionID"]);
+        const state = getState(part.sessionID);
         if (!state) return;
 
-        const cachedRole = sessionCache.getRole(
-          part["sessionID"],
-          part["messageID"],
-        );
-        const cachedAgent = sessionCache.getAgent(
-          part["sessionID"],
-          part["messageID"],
-        );
+        const cachedRole = sessionCache.getRole(part.sessionID, part.messageID);
+        const cachedAgent = sessionCache.getAgent(part.sessionID, part.messageID);
 
         if (cachedRole === "assistant" && cachedAgent === state.worker_agent) {
-          sessionCache.setTextPart(
-            part["sessionID"],
-            part["id"],
-            part["messageID"],
-            part["text"],
-          );
+          sessionCache.setTextPart(part.sessionID, part.id, part.messageID, part.text);
         }
         return;
       }
 
       case "session.idle": {
-        const sessionID = event.properties["sessionID"];
+        const sessionID = event.properties.sessionID;
         if (!isString(sessionID)) return;
 
         await onSessionIdle(sessionID);
@@ -184,28 +161,28 @@ export function createEventHandler(
       }
 
       case "session.error": {
-        const sessionID = event.properties["sessionID"];
+        const sessionID = event.properties.sessionID;
         if (!isString(sessionID)) return;
 
         const state = getState(sessionID);
         if (!state || state.mode !== "ENABLED") return;
 
-        const error = normalizeError(event.properties["error"]);
+        const error = normalizeError(event.properties.error);
         await onSessionError(sessionID, error);
         return;
       }
 
       case "session.deleted": {
-        const info = event.properties["info"];
-        if (!isObject(info) || !isString(info["id"])) return;
+        const info = event.properties.info;
+        if (!isObject(info) || !isString(info.id)) return;
 
-        sessionCache.cleanup(info["id"]);
-        deleteState(info["id"]);
+        sessionCache.cleanup(info.id);
+        deleteState(info.id);
         return;
       }
 
       case "permission.updated": {
-        const sessionID = event.properties["sessionID"];
+        const sessionID = event.properties.sessionID;
         if (!isString(sessionID)) return;
 
         const state = getState(sessionID);
@@ -216,17 +193,14 @@ export function createEventHandler(
         // In limited mode, a permission being asked implies it was denied
         // (since our permission.ask hook denies it). Record the block.
         tracking.blockedByPermission = true;
-        const permType = isString(event.properties["type"])
-          ? event.properties["type"]
-          : "unknown";
-        const patterns = event.properties["pattern"];
+        const permType = isString(event.properties.type) ? event.properties.type : "unknown";
+        const patterns = event.properties.pattern;
         const patternStr = Array.isArray(patterns)
           ? patterns.filter(isString).join(", ")
           : isString(patterns)
             ? patterns
             : "";
-        tracking.permissionBlockMessage =
-          `Denied ${permType} ${patternStr}`.trim();
+        tracking.permissionBlockMessage = `Denied ${permType} ${patternStr}`.trim();
         return;
       }
     }

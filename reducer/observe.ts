@@ -1,18 +1,10 @@
-import type {
-  BackgroundTask,
-  EventEnvelope,
-  EventType,
-  ExtendedState,
-} from "../types/index.ts";
+import type { BackgroundTask, EventEnvelope, EventType, ExtendedState } from "../types/index.ts";
 
 type ObservedEvent = {
   [Type in EventType]: EventEnvelope<Type>;
 }[EventType];
 
-function getLatestTask(
-  state: ExtendedState,
-  taskID: string,
-): BackgroundTask | null {
+function getLatestTask(state: ExtendedState, taskID: string): BackgroundTask | null {
   return state.background_tasks.find((task) => task.task_id === taskID) ?? null;
 }
 
@@ -28,8 +20,7 @@ function shouldClearStopReason(state: ExtendedState): boolean {
       return state.stop_reason === "WAITING_FOR_USER_INPUT";
     case "APPROVAL_GRANTED":
       return (
-        state.stop_reason === "WAITING_FOR_APPROVAL" ||
-        state.stop_reason === "PERMISSION_DENIED"
+        state.stop_reason === "WAITING_FOR_APPROVAL" || state.stop_reason === "PERMISSION_DENIED"
       );
     case "TRUST_GRANTED":
       return (
@@ -92,19 +83,14 @@ export function observe(state: ExtendedState): ExtendedState {
   }
 
   if (action?.kind === "WAIT_FOR_BACKGROUND_TASK") {
-    const taskID =
-      typeof action.metadata.task_id === "string"
-        ? action.metadata.task_id
-        : null;
+    const taskID = typeof action.metadata.task_id === "string" ? action.metadata.task_id : null;
     const trackedTask = taskID === null ? null : getLatestTask(nextState, taskID);
 
     if (trackedTask === null || trackedTask.status === "running") {
       nextState = {
         ...nextState,
         stop_reason:
-          nextState.stop_reason === null
-            ? "WAITING_FOR_EXTERNAL_RESOURCE"
-            : nextState.stop_reason,
+          nextState.stop_reason === null ? "WAITING_FOR_EXTERNAL_RESOURCE" : nextState.stop_reason,
       };
     }
   }

@@ -5,8 +5,8 @@ import {
   backgroundWaitIsBestOption,
   completionPredicate,
   noProgressDetected,
-  reduce,
   recoverable,
+  reduce,
   retryableFailure,
 } from "../reducer/index.ts";
 import { createSessionState } from "../state/factory.ts";
@@ -45,9 +45,7 @@ describe("reduce", () => {
     const state = createBaseState({
       phase: "ORIENT",
       plan_state: {
-        steps: [
-          createPlanItem("step-1", "Finish reducer", { status: "completed" }),
-        ],
+        steps: [createPlanItem("step-1", "Finish reducer", { status: "completed" })],
         open_items: [],
         completed_items: [],
         blocked_items: [],

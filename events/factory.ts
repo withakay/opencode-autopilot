@@ -1,4 +1,4 @@
-import type { EventEnvelope, EventPayloadMap, EventType, AgentPhase } from "../types/index.ts";
+import type { AgentPhase, EventEnvelope, EventPayloadMap, EventType } from "../types/index.ts";
 
 export interface CreateEventOptions {
   source?: EventEnvelope["source"];

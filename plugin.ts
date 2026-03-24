@@ -1,7 +1,10 @@
 import type { Plugin } from "@opencode-ai/plugin";
-import type { ExtendedState } from "./types/index.ts";
-import { SessionCache } from "./state/session-cache.ts";
-import { createSessionState } from "./state/factory.ts";
+import { createChatMessageHook } from "./hooks/chat-message.ts";
+import type { SessionTracking } from "./hooks/event-handler.ts";
+import { createEventHandler, createSessionTracking } from "./hooks/event-handler.ts";
+import { createPermissionHook } from "./hooks/permission.ts";
+import { createSystemTransformHook } from "./hooks/system-transform.ts";
+import { createToolAfterHook } from "./hooks/tool-after.ts";
 import {
   buildAutopilotSystemPrompt,
   buildContinuationPrompt,
@@ -11,20 +14,14 @@ import {
   stripAutopilotMarker,
   summarizeAutopilotState,
 } from "./prompts/index.ts";
-import {
-  createEventHandler,
-  createSessionTracking,
-} from "./hooks/event-handler.ts";
-import type { SessionTracking } from "./hooks/event-handler.ts";
-import { createPermissionHook } from "./hooks/permission.ts";
-import { createSystemTransformHook } from "./hooks/system-transform.ts";
-import { createChatMessageHook } from "./hooks/chat-message.ts";
-import { createToolAfterHook } from "./hooks/tool-after.ts";
+import { createSessionState } from "./state/factory.ts";
+import { SessionCache } from "./state/session-cache.ts";
+import { createHelpTool } from "./tools/help.ts";
+import { createPromptTool } from "./tools/prompt.ts";
 import { createStartTool } from "./tools/start.ts";
 import { createStatusTool } from "./tools/status.ts";
 import { createStopTool } from "./tools/stop.ts";
-import { createHelpTool } from "./tools/help.ts";
-import { createPromptTool } from "./tools/prompt.ts";
+import type { ExtendedState } from "./types/index.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -37,11 +34,7 @@ const MAX_HISTORY_ENTRIES = 10;
 // Plugin
 // ---------------------------------------------------------------------------
 
-export const AutopilotPlugin: Plugin = async ({
-  client,
-  directory,
-  worktree,
-}) => {
+export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) => {
   // -- Shared state stores (per-session) --
   const stateBySession = new Map<string, ExtendedState>();
   const trackingBySession = new Map<string, SessionTracking>();
@@ -51,8 +44,7 @@ export const AutopilotPlugin: Plugin = async ({
   const sessionCache = new SessionCache();
 
   // -- State accessors --
-  const getState = (sessionID: string): ExtendedState | undefined =>
-    stateBySession.get(sessionID);
+  const getState = (sessionID: string): ExtendedState | undefined => stateBySession.get(sessionID);
 
   const setState = (sessionID: string, state: ExtendedState): void => {
     stateBySession.set(sessionID, state);
@@ -95,12 +87,12 @@ export const AutopilotPlugin: Plugin = async ({
   }): Promise<void> => {
     try {
       await client.tui.showToast({
-        directory,
-        workspace: worktree,
-        title: opts.title,
-        message: opts.message,
-        variant: opts.variant,
-        duration: 3000,
+        body: {
+          title: opts.title,
+          message: opts.message,
+          variant: opts.variant,
+          duration: 3000,
+        },
       });
     } catch {
       // Ignore TUI toast failures in non-TUI sessions.
@@ -163,7 +155,11 @@ export const AutopilotPlugin: Plugin = async ({
     if (!state || state.mode !== "ENABLED" || !tracking) return;
 
     // Initial dispatch after arming
-    if (state.phase === "OBSERVE" && state.continuation_count === 0 && !tracking.lastAssistantMessageID) {
+    if (
+      state.phase === "OBSERVE" &&
+      state.continuation_count === 0 &&
+      !tracking.lastAssistantMessageID
+    ) {
       recordHistory(sessionID, `Starting task with ${state.worker_agent}`);
       await safeToast({
         title: "Autopilot armed",
@@ -180,8 +176,7 @@ export const AutopilotPlugin: Plugin = async ({
       await setStopped(
         sessionID,
         "Blocked by permissions",
-        tracking.permissionBlockMessage ??
-          "A required action was denied in limited mode.",
+        tracking.permissionBlockMessage ?? "A required action was denied in limited mode.",
         "warning",
       );
       return;
@@ -198,22 +193,12 @@ export const AutopilotPlugin: Plugin = async ({
     const directive = inferAutopilotDirective(assistantText);
 
     if (directive.status === "complete") {
-      await setStopped(
-        sessionID,
-        "Task completed",
-        directive.reason,
-        "success",
-      );
+      await setStopped(sessionID, "Task completed", directive.reason, "success");
       return;
     }
 
     if (directive.status === "blocked") {
-      await setStopped(
-        sessionID,
-        "Task blocked",
-        directive.reason,
-        "warning",
-      );
+      await setStopped(sessionID, "Task blocked", directive.reason, "warning");
       return;
     }
 
@@ -264,8 +249,7 @@ export const AutopilotPlugin: Plugin = async ({
     getTracking,
     onSessionIdle: maybeContinue,
     onSessionError: async (sessionID, error) => {
-      const errorMessage =
-        error?.data?.message ?? "Autopilot encountered an unknown error.";
+      const errorMessage = error?.data?.message ?? "Autopilot encountered an unknown error.";
       const isAbort = error?.name === "MessageAbortedError";
       const reason = isAbort ? "Interrupted" : "Error";
       const variant: "warning" | "error" = isAbort ? "warning" : "error";
@@ -282,20 +266,15 @@ export const AutopilotPlugin: Plugin = async ({
       tracking.blockedByPermission = true;
       const patternStr = Array.isArray(permission.pattern)
         ? permission.pattern.join(", ")
-        : permission.pattern ?? "";
-      tracking.permissionBlockMessage =
-        `Denied ${permission.type} ${patternStr}`.trim();
-      recordHistory(
-        sessionID,
-        tracking.permissionBlockMessage,
-      );
+        : (permission.pattern ?? "");
+      tracking.permissionBlockMessage = `Denied ${permission.type} ${patternStr}`.trim();
+      recordHistory(sessionID, tracking.permissionBlockMessage);
     },
   });
 
   const systemTransformHook = createSystemTransformHook({
     getState,
-    getSuppressCount: (sessionID) =>
-      suppressCountBySession.get(sessionID) ?? 0,
+    getSuppressCount: (sessionID) => suppressCountBySession.get(sessionID) ?? 0,
     decrementSuppressCount: (sessionID) => {
       const current = suppressCountBySession.get(sessionID) ?? 0;
       if (current > 0) {
@@ -327,7 +306,7 @@ export const AutopilotPlugin: Plugin = async ({
     defaultWorkerAgent: AUTOPILOT_FALLBACK_AGENT,
     onArmed: async (sessionID, state) => {
       // Extract and store permissionMode
-      const pm = (state as unknown as Record<string, unknown>)["permissionMode"];
+      const pm = (state as unknown as Record<string, unknown>).permissionMode;
       if (pm === "allow-all" || pm === "limited") {
         permissionModeBySession.set(sessionID, pm);
       } else {
@@ -337,10 +316,7 @@ export const AutopilotPlugin: Plugin = async ({
         sessionID,
         `Armed in ${permissionModeBySession.get(sessionID)} mode with ${state.worker_agent}.`,
       );
-      recordHistory(
-        sessionID,
-        `Continuation limit: ${state.max_continues}.`,
-      );
+      recordHistory(sessionID, `Continuation limit: ${state.max_continues}.`);
     },
   });
 
@@ -358,10 +334,7 @@ export const AutopilotPlugin: Plugin = async ({
       state.mode = "DISABLED";
       state.phase = "STOPPED";
       state.stop_reason = "USER_STOP";
-      recordHistory(
-        sessionID,
-        reason ? `Cancelled by user: ${reason}` : "Cancelled by user",
-      );
+      recordHistory(sessionID, reason ? `Cancelled by user: ${reason}` : "Cancelled by user");
     },
   });
 

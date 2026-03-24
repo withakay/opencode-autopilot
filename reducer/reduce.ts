@@ -3,30 +3,14 @@ import type {
   EventEnvelope,
   EventType,
   ExtendedState,
-  ForegroundAction,
   ReducerResult,
 } from "../types/index.ts";
-import {
-  approvalRequired,
-  compactionAllowed,
-  contextUnsafe,
-  trustRequired,
-} from "./guards.ts";
 import { decide, selectAdmissibleAction } from "./decide.ts";
-import {
-  evaluate,
-  meaningfulProgress,
-  noProgressDetected,
-  retryableFailure,
-} from "./evaluate.ts";
+import { evaluate, meaningfulProgress, noProgressDetected, retryableFailure } from "./evaluate.ts";
+import { approvalRequired, compactionAllowed, contextUnsafe, trustRequired } from "./guards.ts";
 import { integrateEvent } from "./integrate.ts";
 import { observe } from "./observe.ts";
-import {
-  completionPredicate,
-  deriveBlockReason,
-  hardBlockDetected,
-  orient,
-} from "./orient.ts";
+import { completionPredicate, deriveBlockReason, hardBlockDetected, orient } from "./orient.ts";
 import {
   alternateStrategyExists,
   backgroundWaitIsBestOption,
@@ -35,13 +19,7 @@ import {
   resumable,
   unblockEventPresent,
 } from "./recover.ts";
-import {
-  blockOrStop,
-  remainStopped,
-  stayBlocked,
-  stop,
-  transition,
-} from "./transitions.ts";
+import { blockOrStop, remainStopped, stayBlocked, stop, transition } from "./transitions.ts";
 
 type ReducedEvent = {
   [Type in EventType]: EventEnvelope<Type>;
@@ -91,7 +69,7 @@ function buildExecutionEffects(state: ExtendedState): Effect[] {
         approval_scope:
           typeof action.metadata.approval_scope === "string"
             ? action.metadata.approval_scope
-            : action.target_path ?? state.goal,
+            : (action.target_path ?? state.goal),
         approved_action: action.summary,
         justification: action.summary,
         metadata: {
@@ -105,7 +83,7 @@ function buildExecutionEffects(state: ExtendedState): Effect[] {
         requested_path:
           typeof action.metadata.requested_path === "string"
             ? action.metadata.requested_path
-            : action.target_path ?? state.allowed_paths[0] ?? state.goal,
+            : (action.target_path ?? state.allowed_paths[0] ?? state.goal),
         scope: "session",
         justification: action.summary,
         metadata: {
@@ -115,9 +93,7 @@ function buildExecutionEffects(state: ExtendedState): Effect[] {
       return effects;
     case "RUN_TOOL": {
       const targetPaths = Array.isArray(action.metadata.target_paths)
-        ? action.metadata.target_paths.filter(
-            (value): value is string => typeof value === "string",
-          )
+        ? action.metadata.target_paths.filter((value): value is string => typeof value === "string")
         : action.target_path === null
           ? []
           : [action.target_path];
@@ -159,9 +135,7 @@ function buildExecutionEffects(state: ExtendedState): Effect[] {
       effects.push({
         kind: "WAIT_FOR_BACKGROUND_TASK",
         task_id:
-          typeof action.metadata.task_id === "string"
-            ? action.metadata.task_id
-            : action.summary,
+          typeof action.metadata.task_id === "string" ? action.metadata.task_id : action.summary,
         timeout_ms: null,
         metadata: {
           ...action.metadata,
@@ -204,17 +178,10 @@ function deriveTerminalReason(state: ExtendedState): ExtendedState["stop_reason"
 }
 
 function executeState(state: ExtendedState): ReducerResult {
-  return transition(
-    state,
-    "EXECUTE",
-    buildExecutionEffects(state),
-  );
+  return transition(state, "EXECUTE", buildExecutionEffects(state));
 }
 
-export function reduce(
-  state: ExtendedState,
-  event: ReducedEvent,
-): ReducerResult {
+export function reduce(state: ExtendedState, event: ReducedEvent): ReducerResult {
   const integrated = integrateEvent(state, event);
 
   if (event.event_type === "INTERRUPT") {
@@ -324,34 +291,26 @@ export function reduce(
             ...evaluated,
             retry_counters: {
               ...evaluated.retry_counters,
-              recovery_attempt_count:
-                evaluated.retry_counters.recovery_attempt_count + 1,
+              recovery_attempt_count: evaluated.retry_counters.recovery_attempt_count + 1,
             },
           },
           "RECOVER",
         );
       }
 
-      return blockOrStop(
-        evaluated,
-        deriveTerminalReason(evaluated) ?? "UNRECOVERABLE_ERROR",
-      );
+      return blockOrStop(evaluated, deriveTerminalReason(evaluated) ?? "UNRECOVERABLE_ERROR");
     }
 
     case "RECOVER": {
       const recovered = recover(integrated);
 
       if (
-        recovered.retry_counters.global_retry_count >=
-        recovered.retry_counters.max_global_retries
+        recovered.retry_counters.global_retry_count >= recovered.retry_counters.max_global_retries
       ) {
         return blockOrStop(recovered, "RETRY_EXHAUSTED");
       }
 
-      if (
-        recovered.retry_counters.no_progress_count >=
-        recovered.retry_counters.max_no_progress
-      ) {
+      if (recovered.retry_counters.no_progress_count >= recovered.retry_counters.max_no_progress) {
         return blockOrStop(recovered, "NON_PROGRESS_LIMIT");
       }
 

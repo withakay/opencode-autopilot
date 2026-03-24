@@ -7,7 +7,11 @@ type RecoveryEvent = {
 export function alternateStrategyExists(state: ExtendedState): boolean {
   const currentTool = state.foreground_action?.tool_name;
 
-  if (state.plan_state.steps.some((step) => step.status === "pending" || step.status === "in_progress")) {
+  if (
+    state.plan_state.steps.some(
+      (step) => step.status === "pending" || step.status === "in_progress",
+    )
+  ) {
     return true;
   }
 
@@ -46,15 +50,11 @@ export function recoverable(state: ExtendedState): boolean {
   return alternateStrategyExists(state) || backgroundWaitIsBestOption(state);
 }
 
-export function unblockEventPresent(
-  event: RecoveryEvent,
-  state: ExtendedState,
-): boolean {
+export function unblockEventPresent(event: RecoveryEvent, state: ExtendedState): boolean {
   switch (event.event_type) {
     case "APPROVAL_GRANTED":
       return (
-        state.stop_reason === "WAITING_FOR_APPROVAL" ||
-        state.stop_reason === "PERMISSION_DENIED"
+        state.stop_reason === "WAITING_FOR_APPROVAL" || state.stop_reason === "PERMISSION_DENIED"
       );
     case "TRUST_GRANTED":
       return (
@@ -125,7 +125,7 @@ export function recover(state: ExtendedState): ExtendedState {
   const nextTool =
     state.foreground_action?.tool_name === "bash" && state.allowed_tools.includes("read")
       ? "read"
-      : state.allowed_tools.find((tool) => tool !== state.foreground_action?.tool_name) ?? null;
+      : (state.allowed_tools.find((tool) => tool !== state.foreground_action?.tool_name) ?? null);
 
   return {
     ...state,

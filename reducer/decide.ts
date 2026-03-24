@@ -1,10 +1,5 @@
 import type { ExtendedState, ForegroundAction } from "../types/index.ts";
-import {
-  approvalRequired,
-  contextUnsafe,
-  isAdmissible,
-  trustRequired,
-} from "./guards.ts";
+import { approvalRequired, contextUnsafe, isAdmissible, trustRequired } from "./guards.ts";
 
 function readString(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null;
@@ -84,7 +79,8 @@ function nextPlanAction(state: ExtendedState): ForegroundAction | null {
 }
 
 function nextFallbackAction(state: ExtendedState): ForegroundAction | null {
-  const referencedPath = state.latest_observations.last_user_input?.payload.referenced_paths[0] ?? null;
+  const referencedPath =
+    state.latest_observations.last_user_input?.payload.referenced_paths[0] ?? null;
 
   if (referencedPath !== null) {
     return createAction({

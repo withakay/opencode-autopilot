@@ -4,11 +4,7 @@
 // ---------------------------------------------------------------------------
 
 export interface SystemTransformHookDeps {
-  getState: (
-    sessionID: string,
-  ) =>
-    | { mode: "DISABLED" | "ENABLED" }
-    | undefined;
+  getState: (sessionID: string) => { mode: "DISABLED" | "ENABLED" } | undefined;
   getSuppressCount: (sessionID: string) => number;
   decrementSuppressCount: (sessionID: string) => void;
   buildSystemPrompt: () => string;
@@ -25,21 +21,10 @@ interface SystemTransformOutput {
 
 export function createSystemTransformHook(
   deps: SystemTransformHookDeps,
-): (
-  input: SystemTransformInput,
-  output: SystemTransformOutput,
-) => Promise<void> {
-  const {
-    getState,
-    getSuppressCount,
-    decrementSuppressCount,
-    buildSystemPrompt,
-  } = deps;
+): (input: SystemTransformInput, output: SystemTransformOutput) => Promise<void> {
+  const { getState, getSuppressCount, decrementSuppressCount, buildSystemPrompt } = deps;
 
-  return async (
-    input: SystemTransformInput,
-    output: SystemTransformOutput,
-  ): Promise<void> => {
+  return async (input: SystemTransformInput, output: SystemTransformOutput): Promise<void> => {
     const { sessionID } = input;
 
     if (sessionID === undefined) {

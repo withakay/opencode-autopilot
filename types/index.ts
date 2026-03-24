@@ -34,7 +34,6 @@ export type {
 export type { AgentMode } from "./mode.ts";
 export type { AgentPhase } from "./phase.ts";
 export type { ReducerResult } from "./reducer.ts";
-export type { StopReason } from "./stop-reason.ts";
 export type {
   ApprovalState,
   BackgroundTask,
@@ -47,3 +46,4 @@ export type {
   RetryCounters,
   TrustState,
 } from "./state.ts";
+export type { StopReason } from "./stop-reason.ts";

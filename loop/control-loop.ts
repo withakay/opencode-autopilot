@@ -1,6 +1,6 @@
-import { createEvent } from "../events/index.ts";
 import type { DispatchEffectContext } from "../effects/dispatcher.ts";
 import { dispatchEffect } from "../effects/index.ts";
+import { createEvent } from "../events/index.ts";
 import { reduce } from "../reducer/index.ts";
 import type {
   Effect,
@@ -76,10 +76,7 @@ function isTerminalPhase(state: ExtendedState): boolean {
   return state.phase === "STOPPED" || state.phase === "BLOCKED";
 }
 
-function makeInterruptEvent(
-  state: ExtendedState,
-  message: string,
-): ReducedEvent {
+function makeInterruptEvent(state: ExtendedState, message: string): ReducedEvent {
   return createEvent(
     "INTERRUPT",
     {
@@ -209,12 +206,8 @@ export async function runControlLoop(
     // ---- Dispatch effects ----
     // PERSIST_SNAPSHOT effects are dispatched first (safety invariant S9).
     // Then remaining effects in order.
-    const snapshotEffects = dispatchedEffects.filter(
-      (e) => e.kind === "PERSIST_SNAPSHOT",
-    );
-    const otherEffects = dispatchedEffects.filter(
-      (e) => e.kind !== "PERSIST_SNAPSHOT",
-    );
+    const snapshotEffects = dispatchedEffects.filter((e) => e.kind === "PERSIST_SNAPSHOT");
+    const otherEffects = dispatchedEffects.filter((e) => e.kind !== "PERSIST_SNAPSHOT");
 
     // Dispatch snapshot effects first (don't re-queue their results,
     // they are housekeeping).
@@ -225,16 +218,16 @@ export async function runControlLoop(
     // Dispatch remaining effects and queue their result events.
     for (const eff of otherEffects) {
       // Check abort between effect dispatches.
-      if (config.signal?.aborted === true) {
-        const interruptEvent = makeInterruptEvent(state, "Abort signal received during effect dispatch");
+      if (config.signal?.aborted) {
+        const interruptEvent = makeInterruptEvent(
+          state,
+          "Abort signal received during effect dispatch",
+        );
         eventQueue.unshift(interruptEvent);
         break;
       }
 
-      const resultEvent = await dispatchEffect(
-        eff,
-        buildDispatchContext(state, event, config),
-      );
+      const resultEvent = await dispatchEffect(eff, buildDispatchContext(state, event, config));
       eventQueue.push(resultEvent);
     }
 
@@ -267,10 +260,7 @@ export async function runControlLoop(
  *
  * Returns the reducer result so the caller can update the shared state.
  */
-export function interruptLoop(
-  state: ExtendedState,
-  message?: string,
-): ReducerResult {
+export function interruptLoop(state: ExtendedState, message?: string): ReducerResult {
   const event = makeInterruptEvent(state, message ?? "User requested stop");
   return reduce(state, event);
 }

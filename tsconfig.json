@@ -11,7 +11,7 @@
     "noImplicitOverride": true,
     "noFallthroughCasesInSwitch": true,
     "noEmit": true,
-    "types": ["bun"],
+    "types": ["bun-types"],
     "skipLibCheck": true
   },
   "include": ["./**/*.ts"]

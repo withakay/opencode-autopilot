@@ -6,8 +6,7 @@ import type {
   StopReason,
 } from "../types/index.ts";
 
-const DEFAULT_BLOCKED_REASON: StopReason =
-  "AMBIGUOUS_STATE_REQUIRES_ESCALATION";
+const DEFAULT_BLOCKED_REASON: StopReason = "AMBIGUOUS_STATE_REQUIRES_ESCALATION";
 
 const DEFAULT_STOPPED_REASON: StopReason = "USER_STOP";
 
@@ -101,10 +100,7 @@ export function blockOrStop(
   return stop(state, reason, effects);
 }
 
-export function stayBlocked(
-  state: ExtendedState,
-  effects: readonly Effect[] = [],
-): ReducerResult {
+export function stayBlocked(state: ExtendedState, effects: readonly Effect[] = []): ReducerResult {
   return {
     nextState: {
       ...state,

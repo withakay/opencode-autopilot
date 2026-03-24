@@ -23,10 +23,7 @@ function findIdentifierError(event: EventEnvelope): string | null {
 
   const payload = event.payload as unknown as Record<string, unknown>;
   const invocationID = payload.invocation_id;
-  if (
-    typeof invocationID === "string" &&
-    !isWellFormedIdentifier(invocationID)
-  ) {
+  if (typeof invocationID === "string" && !isWellFormedIdentifier(invocationID)) {
     return "payload invocation_id is not well-formed";
   }
 
@@ -44,12 +41,7 @@ function findTimestampError(event: EventEnvelope): string | null {
   }
 
   const payload = event.payload as unknown as Record<string, unknown>;
-  const timestampFields = [
-    "started_at",
-    "completed_at",
-    "approved_until",
-    "deadline_at",
-  ] as const;
+  const timestampFields = ["started_at", "completed_at", "approved_until", "deadline_at"] as const;
 
   for (const field of timestampFields) {
     const value = payload[field];

@@ -24,10 +24,7 @@ interface ToolAfterOutput {
 export function createToolAfterHook(
   deps: ToolAfterHookDeps,
 ): (input: ToolAfterInput, output: ToolAfterOutput) => Promise<void> {
-  return async (
-    input: ToolAfterInput,
-    output: ToolAfterOutput,
-  ): Promise<void> => {
+  return async (input: ToolAfterInput, output: ToolAfterOutput): Promise<void> => {
     if (input.tool !== AUTOPILOT_STATUS_TOOL) {
       return;
     }

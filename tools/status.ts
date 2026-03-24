@@ -27,10 +27,7 @@ export function createStatusTool(deps: StatusToolDeps) {
       }
 
       const history = deps.getHistory(context.sessionID);
-      const historyStr =
-        history.length > 0
-          ? `\nRecent events:\n- ${history.join("\n- ")}`
-          : "";
+      const historyStr = history.length > 0 ? `\nRecent events:\n- ${history.join("\n- ")}` : "";
 
       return `${deps.summarizeState(state)}${historyStr}`;
     },

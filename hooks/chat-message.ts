@@ -5,11 +5,7 @@
 export const CONTROL_AGENT = "autopilot";
 
 export interface ChatMessageHookDeps {
-  getState: (
-    sessionID: string,
-  ) =>
-    | { mode: "DISABLED" | "ENABLED" }
-    | undefined;
+  getState: (sessionID: string) => { mode: "DISABLED" | "ENABLED" } | undefined;
   incrementSuppressCount: (sessionID: string) => void;
 }
 
@@ -31,10 +27,7 @@ export function createChatMessageHook(
 ): (input: ChatMessageInput, output: ChatMessageOutput) => Promise<void> {
   const { getState, incrementSuppressCount } = deps;
 
-  return async (
-    input: ChatMessageInput,
-    _output: ChatMessageOutput,
-  ): Promise<void> => {
+  return async (input: ChatMessageInput, _output: ChatMessageOutput): Promise<void> => {
     const state = getState(input.sessionID);
 
     if (!state || state.mode !== "ENABLED") {

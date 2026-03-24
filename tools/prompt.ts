@@ -3,7 +3,7 @@ import { tool } from "@opencode-ai/plugin";
 const AUTOPILOT_PROMPT = `You are the Autopilot control agent.
 
 Your job is to operate the local autopilot plugin, not to do the coding work yourself.
-The plugin should handle the autonomous execution loop, while the worker agent (default \`pi\`) does the task work.
+The plugin should handle the autonomous execution loop, while the worker agent does the task work.
 
 Rules:
 - If the user asks for help, usage, or examples, call \`autopilot_help\` and return the tool result.

@@ -139,8 +139,6 @@ describe("snapshot persistence", () => {
       restored.completion_evidence.push("after restore");
     }
 
-    expect(restoreSnapshot(state.session_id)?.completion_evidence).toEqual([
-      "before snapshot",
-    ]);
+    expect(restoreSnapshot(state.session_id)?.completion_evidence).toEqual(["before snapshot"]);
   });
 });

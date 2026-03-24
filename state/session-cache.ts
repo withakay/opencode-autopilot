@@ -57,12 +57,7 @@ export class SessionCache {
     return this.sessions.get(sessionID)?.agents.get(messageID) ?? null;
   }
 
-  setTextPart(
-    sessionID: string,
-    partID: string,
-    messageID: string,
-    text: string,
-  ): void {
+  setTextPart(sessionID: string, partID: string, messageID: string, text: string): void {
     this.ensureSession(sessionID).textParts.set(partID, {
       id: partID,
       messageID,

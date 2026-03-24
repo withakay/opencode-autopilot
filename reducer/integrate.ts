@@ -1,9 +1,4 @@
-import type {
-  BackgroundTask,
-  EventEnvelope,
-  EventType,
-  ExtendedState,
-} from "../types/index.ts";
+import type { BackgroundTask, EventEnvelope, EventType, ExtendedState } from "../types/index.ts";
 
 type IntegratedEvent = {
   [Type in EventType]: EventEnvelope<Type>;
@@ -13,7 +8,10 @@ function mergeUnique(values: readonly string[], additions: readonly string[]): s
   return [...new Set([...values, ...additions])];
 }
 
-function appendEvent(state: ExtendedState, event: EventEnvelope): ExtendedState["latest_observations"]["events"] {
+function appendEvent(
+  state: ExtendedState,
+  event: EventEnvelope,
+): ExtendedState["latest_observations"]["events"] {
   if (state.latest_observations.events.some((item) => item.event_id === event.event_id)) {
     return state.latest_observations.events;
   }
@@ -98,10 +96,7 @@ function appendEvidence(state: ExtendedState, entry: string | null): string[] {
   return [...state.completion_evidence, entry];
 }
 
-export function integrateEvent(
-  state: ExtendedState,
-  event: IntegratedEvent,
-): ExtendedState {
+export function integrateEvent(state: ExtendedState, event: IntegratedEvent): ExtendedState {
   if (state.latest_observations.events.some((item) => item.event_id === event.event_id)) {
     return state;
   }
@@ -162,10 +157,7 @@ export function integrateEvent(
     case "APPROVAL_GRANTED": {
       nextState = {
         ...nextState,
-        completion_evidence: appendEvidence(
-          nextState,
-          `approval:${event.payload.approved_action}`,
-        ),
+        completion_evidence: appendEvidence(nextState, `approval:${event.payload.approved_action}`),
         approval_state: {
           ...nextState.approval_state,
           status: "granted",
@@ -199,10 +191,7 @@ export function integrateEvent(
     case "TRUST_GRANTED": {
       nextState = {
         ...nextState,
-        completion_evidence: appendEvidence(
-          nextState,
-          `trust:${event.payload.trusted_path}`,
-        ),
+        completion_evidence: appendEvidence(nextState, `trust:${event.payload.trusted_path}`),
         allowed_paths: mergeUnique(nextState.allowed_paths, [event.payload.trusted_path]),
         trust_state: {
           ...nextState.trust_state,

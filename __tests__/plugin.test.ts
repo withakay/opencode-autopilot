@@ -1,16 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import {
-  createEventHandler,
-  createSessionTracking,
-} from "../hooks/event-handler.ts";
+import { CONTROL_AGENT, createChatMessageHook } from "../hooks/chat-message.ts";
 import type { SessionTracking } from "../hooks/event-handler.ts";
+import { createEventHandler, createSessionTracking } from "../hooks/event-handler.ts";
 import { createPermissionHook } from "../hooks/permission.ts";
 import { createSystemTransformHook } from "../hooks/system-transform.ts";
-import { createChatMessageHook, CONTROL_AGENT } from "../hooks/chat-message.ts";
 import { createToolAfterHook } from "../hooks/tool-after.ts";
-import { SessionCache } from "../state/session-cache.ts";
+import { buildAutopilotSystemPrompt, stripAutopilotMarker } from "../prompts/index.ts";
 import { createSessionState } from "../state/factory.ts";
-import { stripAutopilotMarker, buildAutopilotSystemPrompt } from "../prompts/index.ts";
+import { SessionCache } from "../state/session-cache.ts";
 import type { ExtendedState } from "../types/index.ts";
 
 // ---------------------------------------------------------------------------
@@ -144,7 +141,7 @@ describe("Plugin Integration — event handler", () => {
 
   test("captures only worker-agent replies", async () => {
     const env = createTestEnv();
-    const state = env.armSession("s1", { workerAgent: "pi" });
+    const _state = env.armSession("s1", { workerAgent: "pi" });
     const tracking = env.getTracking("s1")!;
     tracking.awaitingWorkerReply = true;
 
@@ -258,7 +255,7 @@ describe("Plugin Integration — permission hook", () => {
     const env = createTestEnv();
     env.armSession("s1", { permissionMode: "allow-all" });
 
-    const output = { status: "ask" as const };
+    const output: { status: "ask" | "deny" | "allow" } = { status: "ask" };
     await env.permissionHook(
       {
         id: "p1",
@@ -279,7 +276,7 @@ describe("Plugin Integration — permission hook", () => {
     const env = createTestEnv();
     env.armSession("s1", { permissionMode: "limited" });
 
-    const output = { status: "ask" as const };
+    const output: { status: "ask" | "deny" | "allow" } = { status: "ask" };
     await env.permissionHook(
       {
         id: "p1",
@@ -295,7 +292,7 @@ describe("Plugin Integration — permission hook", () => {
 
     expect(output.status).toBe("deny");
     expect(env.deniedPermissions).toHaveLength(1);
-    expect(env.deniedPermissions[0]!.type).toBe("write");
+    expect(env.deniedPermissions[0]?.type).toBe("write");
   });
 
   test("no-op for disabled sessions", async () => {
@@ -326,10 +323,7 @@ describe("Plugin Integration — system transform", () => {
     env.armSession("s1");
 
     const output = { system: [] as string[] };
-    await env.systemTransformHook(
-      { sessionID: "s1", model: {} },
-      output,
-    );
+    await env.systemTransformHook({ sessionID: "s1", model: {} }, output);
 
     expect(output.system).toHaveLength(1);
     expect(output.system[0]).toContain("Autopilot mode is active");
@@ -349,20 +343,14 @@ describe("Plugin Integration — system transform", () => {
     );
 
     const output = { system: [] as string[] };
-    await env.systemTransformHook(
-      { sessionID: "s1", model: {} },
-      output,
-    );
+    await env.systemTransformHook({ sessionID: "s1", model: {} }, output);
 
     // Suppressed — no prompt added
     expect(output.system).toHaveLength(0);
 
     // Next turn should inject again
     const output2 = { system: [] as string[] };
-    await env.systemTransformHook(
-      { sessionID: "s1", model: {} },
-      output2,
-    );
+    await env.systemTransformHook({ sessionID: "s1", model: {} }, output2);
 
     expect(output2.system).toHaveLength(1);
   });
@@ -373,8 +361,7 @@ describe("Plugin Integration — tool.execute.after", () => {
     const env = createTestEnv();
     const output = {
       title: "Status",
-      output:
-        'Autopilot is running.\n<autopilot status="continue">keep going</autopilot>',
+      output: 'Autopilot is running.\n<autopilot status="continue">keep going</autopilot>',
       metadata: {},
     };
 
@@ -394,8 +381,7 @@ describe("Plugin Integration — tool.execute.after", () => {
 
   test("does not modify output for other tools", async () => {
     const env = createTestEnv();
-    const original =
-      'Some output\n<autopilot status="continue">keep going</autopilot>';
+    const original = 'Some output\n<autopilot status="continue">keep going</autopilot>';
     const output = {
       title: "Other",
       output: original,

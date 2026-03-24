@@ -32,16 +32,11 @@ export function createStartTool(deps: StartToolDeps) {
   return tool({
     description: "Arm autopilot mode for the current session",
     args: {
-      task: tool.schema
-        .string()
-        .min(1)
-        .describe("Task for the autonomous worker to execute"),
+      task: tool.schema.string().min(1).describe("Task for the autonomous worker to execute"),
       permissionMode: tool.schema
         .enum(["limited", "allow-all"])
         .optional()
-        .describe(
-          "How permissions should behave while autopilot is active",
-        ),
+        .describe("How permissions should behave while autopilot is active"),
       maxContinues: tool.schema
         .number()
         .int()
@@ -53,9 +48,7 @@ export function createStartTool(deps: StartToolDeps) {
       workerAgent: tool.schema
         .string()
         .optional()
-        .describe(
-          "Agent used for autonomous follow-up turns (defaults to pi)",
-        ),
+        .describe("Agent used for autonomous follow-up turns (defaults to pi)"),
     },
     async execute(args, context) {
       if (args.task.trim().toLowerCase() === "help") {

@@ -5,6 +5,13 @@ export {
   noProgressDetected,
   retryableFailure,
 } from "./evaluate.ts";
+export {
+  approvalRequired,
+  compactionAllowed,
+  contextUnsafe,
+  isAdmissible,
+  trustRequired,
+} from "./guards.ts";
 export { integrateEvent } from "./integrate.ts";
 export { observe } from "./observe.ts";
 export {
@@ -22,13 +29,6 @@ export {
   unblockEventPresent,
 } from "./recover.ts";
 export { reduce } from "./reduce.ts";
-export {
-  approvalRequired,
-  compactionAllowed,
-  contextUnsafe,
-  isAdmissible,
-  trustRequired,
-} from "./guards.ts";
 export {
   block,
   blockOrStop,

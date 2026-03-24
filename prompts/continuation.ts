@@ -4,9 +4,7 @@ export interface ContinuationPromptOptions {
   task: string;
 }
 
-export function buildContinuationPrompt(
-  options: ContinuationPromptOptions,
-): string {
+export function buildContinuationPrompt(options: ContinuationPromptOptions): string {
   return [
     `Autopilot continuation ${options.continueCount}/${options.maxContinues}.`,
     "Continue working autonomously on the same task.",

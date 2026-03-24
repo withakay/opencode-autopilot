@@ -28,7 +28,7 @@ Examples:
 Defaults:
 - permission mode: \`limited\`
 - continuation limit: \`10\`
-- worker agent: \`pi\`
+- worker agent: \`general\`
 `.trim();
     },
   });

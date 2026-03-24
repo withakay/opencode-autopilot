@@ -9,3 +9,5 @@ export type { StopToolDeps } from "./stop.ts";
 
 export { createHelpTool } from "./help.ts";
 
+export { createPromptTool } from "./prompt.ts";
+

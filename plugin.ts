@@ -24,12 +24,13 @@ import { createStartTool } from "./tools/start.ts";
 import { createStatusTool } from "./tools/status.ts";
 import { createStopTool } from "./tools/stop.ts";
 import { createHelpTool } from "./tools/help.ts";
+import { createPromptTool } from "./tools/prompt.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const AUTOPILOT_FALLBACK_AGENT = "pi";
+const AUTOPILOT_FALLBACK_AGENT = "general";
 const MAX_HISTORY_ENTRIES = 10;
 
 // ---------------------------------------------------------------------------
@@ -365,6 +366,7 @@ export const AutopilotPlugin: Plugin = async ({
   });
 
   const helpTool = createHelpTool();
+  const promptTool = createPromptTool();
 
   // -- Return assembled hooks --
   return {
@@ -373,6 +375,7 @@ export const AutopilotPlugin: Plugin = async ({
       autopilot_status: statusTool,
       autopilot_stop: stopTool,
       autopilot_help: helpTool,
+      autopilot_prompt: promptTool,
     },
 
     event: eventHandler,

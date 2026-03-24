@@ -22,12 +22,13 @@ Register the plugin in your `opencode.jsonc`:
 }
 ```
 
-The plugin registers four tools:
+The plugin registers five tools:
 
 - **`autopilot_start`** — Arm autopilot mode for the current session
 - **`autopilot_status`** — Show autopilot status for the current session
 - **`autopilot_stop`** — Stop autopilot mode for the current session
 - **`autopilot_help`** — Show usage instructions
+- **`autopilot_prompt`** — Get the control agent prompt (call at session start)
 
 ### Control Agent
 
@@ -39,19 +40,20 @@ Create an agent in `opencode.jsonc` to control the plugin:
     "autopilot": {
       "description": "Control agent for autopilot plugin",
       "mode": "primary",
-      "model": "github-copilot/gpt-5-mini",
       "temperature": 0,
-      "prompt": "{file:./prompts/autopilot.txt}",
       "tools": {
         "autopilot_start": true,
         "autopilot_status": true,
         "autopilot_stop": true,
-        "autopilot_help": true
+        "autopilot_help": true,
+        "autopilot_prompt": true
       }
     }
   }
 }
 ```
+
+The agent should call `autopilot_prompt` at the start of each session to get its operating instructions.
 
 Then switch to the Autopilot agent and send your task.
 

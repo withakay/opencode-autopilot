@@ -190,7 +190,7 @@ await client.tui.showToast({
 
 The autopilot plugin implements a continuation policy for an interactive coding agent. When enabled:
 
-1. User arms autopilot with a task via `autopilot_start` tool (triggered by `/autopilot` command).
+1. User arms autopilot with a task via the `autopilot` tool.
 2. The plugin dispatches the task to a worker agent (default: `pi`) via `client.session.promptAsync`.
 3. On `session.idle`, the plugin reads the worker's last response, parses an `<autopilot status="continue|complete|blocked">` marker.
 4. If `continue`: dispatches a continuation prompt (up to `maxContinues` times).
@@ -235,9 +235,9 @@ After Phase 13 (code review), use the `code-review` or `coderabbit-code-review` 
 
 After Phase 14 (full test suite), smoke test with:
 ```
-/autopilot status
-/autopilot --max 1 echo hello world
-/autopilot stop
+autopilot(action="status")
+autopilot(task="echo hello world", maxContinues=1)
+autopilot(action="stop")
 ```
 
 ---

@@ -22,15 +22,30 @@ Register the plugin in your `opencode.jsonc`:
 }
 ```
 
-The plugin registers five tools:
+The plugin registers a primary control tool plus compatibility helpers:
 
-- **`autopilot_start`** — Arm autopilot mode for the current session
-- **`autopilot_status`** — Show autopilot status for the current session
-- **`autopilot_stop`** — Stop autopilot mode for the current session
-- **`autopilot_help`** — Show usage instructions
-- **`autopilot_prompt`** — Get the control agent prompt (call at session start)
+- **`autopilot`** — Start, inspect, stop, or get help for autopilot from one tool
+- **`autopilot_start`** — Compatibility helper to arm autopilot mode
+- **`autopilot_status`** — Compatibility helper to show autopilot status
+- **`autopilot_stop`** — Compatibility helper to stop autopilot mode
+- **`autopilot_help`** — Compatibility helper to show usage instructions
+- **`autopilot_prompt`** — Optional prompt for a dedicated control agent
 
-### Control Agent
+### Direct Tool Usage
+
+Call the `autopilot` tool directly:
+
+- Start: `autopilot(task="Fix the failing tests")`
+- Status: `autopilot(action="status")`
+- Stop: `autopilot(action="stop", reason="inspect manually")`
+
+Optional start settings:
+
+- `permissionMode`: `limited` or `allow-all`
+- `maxContinues`: positive integer continuation cap
+- `workerAgent`: worker agent name
+
+### Optional Control Agent
 
 Create an agent in `opencode.jsonc` to control the plugin:
 
@@ -46,14 +61,15 @@ Create an agent in `opencode.jsonc` to control the plugin:
         "autopilot_status": true,
         "autopilot_stop": true,
         "autopilot_help": true,
-        "autopilot_prompt": true
+        "autopilot_prompt": true,
+        "autopilot": true
       }
     }
   }
 }
 ```
 
-The agent should call `autopilot_prompt` at the start of each session to get its operating instructions.
+The agent should call `autopilot_prompt` at the start of each session to get its operating instructions. The prompt now routes all control requests through the single `autopilot` tool.
 
 Then switch to the Autopilot agent and send your task.
 

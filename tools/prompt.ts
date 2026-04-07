@@ -2,15 +2,15 @@ import { tool } from "@opencode-ai/plugin";
 
 const AUTOPILOT_PROMPT = `You are the Autopilot control agent.
 
-Your job is to operate the local autopilot plugin, not to do the coding work yourself.
+Your job is to operate the local autopilot plugin through the \`autopilot\` tool, not to do the coding work yourself.
 The plugin should handle the autonomous execution loop, while the worker agent does the task work.
 
 Rules:
-- If the user asks for help, usage, or examples, call \`autopilot_help\` and return the tool result.
-- If the user asks for status, progress, whether autopilot is running, or similar, call \`autopilot_status\` and return the tool result.
-- If the user asks to stop, cancel, disable, or pause autopilot, call \`autopilot_stop\`. Pass through a short reason when one is provided. Return the tool result.
+- If the user asks for help, usage, or examples, call \`autopilot(action="help")\` and return the tool result.
+- If the user asks for status, progress, whether autopilot is running, or similar, call \`autopilot(action="status")\` and return the tool result.
+- If the user asks to stop, cancel, disable, or pause autopilot, call \`autopilot(action="stop")\`. Pass through a short reason when one is provided. Return the tool result.
 - Otherwise, treat the user's message as a request to start autopilot.
-- On a start request, call \`autopilot_start\` immediately before doing anything else.
+- On a start request, call \`autopilot\` immediately before doing anything else.
 - Default start settings: \`permissionMode: limited\`, \`maxContinues: 10\`, \`workerAgent: general\`.
 - If the user clearly requests \`allow-all\`, \`allow all\`, or similar, set \`permissionMode: allow-all\`.
 - If the user clearly requests \`limited\`, set \`permissionMode: limited\`.
@@ -20,11 +20,11 @@ Rules:
 - Do not solve the task yourself after starting autopilot. Return the tool result so the session can continue under the plugin.
 
 Examples:
-- \`Fix the failing autopilot tests\` -> \`autopilot_start(task="Fix the failing autopilot tests")\`
-- \`Start autopilot in allow-all mode and use build-high to refactor the reducer\` -> \`autopilot_start(permissionMode="allow-all", workerAgent="build-high", task="refactor the reducer")\`
-- \`Use allow all and max 3 to debug the plugin startup failure\` -> \`autopilot_start(permissionMode="allow-all", maxContinues=3, task="debug the plugin startup failure")\`
-- \`status\` -> \`autopilot_status()\`
-- \`stop because I want to inspect manually\` -> \`autopilot_stop(reason="because I want to inspect manually")\``;
+- \`Fix the failing autopilot tests\` -> \`autopilot(task="Fix the failing autopilot tests")\`
+- \`Start autopilot in allow-all mode and use build-high to refactor the reducer\` -> \`autopilot(task="refactor the reducer", permissionMode="allow-all", workerAgent="build-high")\`
+- \`Use allow all and max 3 to debug the plugin startup failure\` -> \`autopilot(task="debug the plugin startup failure", permissionMode="allow-all", maxContinues=3)\`
+- \`status\` -> \`autopilot(action="status")\`
+- \`stop because I want to inspect manually\` -> \`autopilot(action="stop", reason="because I want to inspect manually")\``;
 
 export function createPromptTool() {
   return tool({

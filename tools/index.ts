@@ -1,3 +1,5 @@
+export type { AutopilotToolDeps } from "./autopilot.ts";
+export { createAutopilotTool } from "./autopilot.ts";
 export { createHelpTool } from "./help.ts";
 export { createPromptTool } from "./prompt.ts";
 export type { StartToolDeps } from "./start.ts";

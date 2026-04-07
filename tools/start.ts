@@ -1,5 +1,6 @@
 import { tool } from "@opencode-ai/plugin";
 import type { ExtendedState } from "../types/index.ts";
+import { AUTOPILOT_USAGE } from "./usage.ts";
 
 // ---------------------------------------------------------------------------
 // Deps
@@ -52,31 +53,7 @@ export function createStartTool(deps: StartToolDeps) {
     },
     async execute(args, context) {
       if (args.task.trim().toLowerCase() === "help") {
-        return `
-## Autopilot Usage
-
-Use the global \`Autopilot\` agent to control the autopilot plugin.
-
-**Start Autopilot:**
-Switch to the \`Autopilot\` agent, then send the task you want delegated.
-
-Examples:
-- \`Fix the failing tests\`
-- \`Use allow-all mode and build-high to refactor the reducer\`
-
-**Check Status:**
-- \`status\`
-- \`is autopilot running?\`
-
-**Stop Autopilot:**
-- \`stop\`
-- \`stop because I want to inspect manually\`
-
-Defaults:
-- permission mode: \`limited\`
-- continuation limit: \`10\`
-- worker agent: \`pi\`
-`.trim();
+        return AUTOPILOT_USAGE.replace("`general`", "`pi`");
       }
 
       const permissionMode = args.permissionMode ?? "limited";

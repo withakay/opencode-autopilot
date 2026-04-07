@@ -17,6 +17,7 @@ import {
 import { createSessionState } from "./state/factory.ts";
 import { SessionCache } from "./state/session-cache.ts";
 import { createHelpTool } from "./tools/help.ts";
+import { createAutopilotTool } from "./tools/autopilot.ts";
 import { createPromptTool } from "./tools/prompt.ts";
 import { createStartTool } from "./tools/start.ts";
 import { createStatusTool } from "./tools/status.ts";
@@ -340,10 +341,17 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
 
   const helpTool = createHelpTool();
   const promptTool = createPromptTool();
+  const autopilotTool = createAutopilotTool({
+    startTool,
+    statusTool,
+    stopTool,
+    helpTool,
+  });
 
   // -- Return assembled hooks --
   return {
     tool: {
+      autopilot: autopilotTool,
       autopilot_start: startTool,
       autopilot_status: statusTool,
       autopilot_stop: stopTool,

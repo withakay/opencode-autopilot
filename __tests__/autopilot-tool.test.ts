@@ -1,6 +1,21 @@
 import { describe, expect, test } from "bun:test";
 import { createAutopilotTool } from "../tools/autopilot.ts";
 
+type AutopilotToolContext = Parameters<ReturnType<typeof createAutopilotTool>["execute"]>[1];
+
+function createToolContext(): AutopilotToolContext {
+  return {
+    sessionID: "s1",
+    messageID: "m1",
+    agent: "pi",
+    directory: "/tmp",
+    worktree: "/tmp",
+    abort: new AbortController().signal,
+    metadata: () => {},
+    ask: async () => {},
+  };
+}
+
 describe("Autopilot Tool", () => {
   test("defaults to status when no action is provided", async () => {
     const calls: string[] = [];
@@ -16,7 +31,7 @@ describe("Autopilot Tool", () => {
       helpTool: { execute: async () => "help" },
     });
 
-    const result = await tool.execute({}, { sessionID: "s1", messageID: "m1", agent: "pi" } as any);
+    const result = await tool.execute({}, createToolContext());
 
     expect(result).toBe("status");
     expect(calls).toEqual(["status"]);
@@ -51,7 +66,7 @@ describe("Autopilot Tool", () => {
         maxContinues: 3,
         workerAgent: "  build-high  ",
       },
-      { sessionID: "s1", messageID: "m1", agent: "pi" } as any,
+      createToolContext(),
     );
 
     expect(result).toBe("started");
@@ -77,10 +92,7 @@ describe("Autopilot Tool", () => {
       helpTool: { execute: async () => "help" },
     });
 
-    const result = await tool.execute(
-      { reason: "  inspect manually  " },
-      { sessionID: "s1", messageID: "m1", agent: "pi" } as any,
-    );
+    const result = await tool.execute({ reason: "  inspect manually  " }, createToolContext());
 
     expect(result).toBe("stopped");
     expect(received).toEqual({ reason: "inspect manually" });
@@ -94,10 +106,7 @@ describe("Autopilot Tool", () => {
       helpTool: { execute: async () => "help" },
     });
 
-    const result = await tool.execute(
-      { action: "start" },
-      { sessionID: "s1", messageID: "m1", agent: "pi" } as any,
-    );
+    const result = await tool.execute({ action: "start" }, createToolContext());
 
     expect(result).toBe("A task is required to start autopilot.");
   });

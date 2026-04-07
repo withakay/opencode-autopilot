@@ -1,7 +1,7 @@
 import { tool } from "@opencode-ai/plugin";
 
 interface ExecutableTool<TArgs> {
-  execute: (args: TArgs, context: unknown) => Promise<string> | string;
+  execute(args: TArgs, context: unknown): Promise<string> | string;
 }
 
 export interface AutopilotToolDeps {

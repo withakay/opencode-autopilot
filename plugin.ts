@@ -16,8 +16,8 @@ import {
 } from "./prompts/index.ts";
 import { createSessionState } from "./state/factory.ts";
 import { SessionCache } from "./state/session-cache.ts";
-import { createHelpTool } from "./tools/help.ts";
 import { createAutopilotTool } from "./tools/autopilot.ts";
+import { createHelpTool } from "./tools/help.ts";
 import { createPromptTool } from "./tools/prompt.ts";
 import { createStartTool } from "./tools/start.ts";
 import { createStatusTool } from "./tools/status.ts";

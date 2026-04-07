@@ -173,11 +173,7 @@ export async function runControlLoop(
     // ---- Dequeue next event ----
     const event = eventQueue.shift();
     if (!event) {
-      return {
-        finalState: state,
-        iterations: iteration,
-        stoppedBecause: "queue_drained",
-      };
+      break;
     }
     iteration++;
 
@@ -263,7 +259,7 @@ export async function runControlLoop(
       ? state.phase === "STOPPED"
         ? "phase_stopped"
         : "phase_blocked"
-      : "max_iterations",
+      : "queue_drained",
   };
 }
 

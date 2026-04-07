@@ -143,7 +143,6 @@ describe("Plugin Integration — event handler", () => {
     const env = createTestEnv();
     const _state = env.armSession("s1", { workerAgent: "pi" });
     const tracking = env.getTracking("s1");
-    expect(tracking).toBeDefined();
     if (!tracking) {
       throw new Error("tracking should exist for an armed session");
     }

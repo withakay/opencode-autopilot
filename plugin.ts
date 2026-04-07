@@ -155,7 +155,7 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
       state.phase === "OBSERVE" &&
       state.continuation_count === 0 &&
       !tracking.lastAssistantMessageID &&
-      state.goal.trim().length > 0
+      state.session_mode === "delegated-task"
     ) {
       recordHistory(sessionID, `Starting task with ${state.worker_agent}`);
       await safeToast({
@@ -321,7 +321,7 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
         permissionModeBySession.set(sessionID, "limited");
       }
 
-      if (state.goal.trim().length > 0) {
+      if (state.session_mode === "delegated-task") {
         recordHistory(
           sessionID,
           `Delegated task armed in ${permissionModeBySession.get(sessionID)} mode with ${state.worker_agent}.`,

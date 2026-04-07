@@ -10,6 +10,7 @@ export interface AutopilotToolDeps {
     goal: string,
     options: {
       maxContinues?: number;
+      sessionMode?: ExtendedState["session_mode"];
       workerAgent?: string;
     },
   ) => ExtendedState;
@@ -30,9 +31,9 @@ export function createAutopilotTool(deps: AutopilotToolDeps) {
       "Control session autopilot: turn it on or off, check status, or start a long-running delegated task",
     args: {
       action: tool.schema
-        .enum(["on", "off", "status", "help", "run"])
+        .enum(["on", "off", "status", "help"])
         .optional()
-        .describe("Autopilot command: on, off, status, help, or run"),
+        .describe("Autopilot command: on, off, status, or help"),
       task: tool.schema
         .string()
         .optional()
@@ -54,9 +55,9 @@ export function createAutopilotTool(deps: AutopilotToolDeps) {
     },
     async execute(args, context) {
       const task = args.task?.trim() ?? "";
-      const action = args.action ?? (task ? "run" : "help");
+      const action = args.action ?? (task ? "on" : "help");
 
-      if (action === "help" || task.toLowerCase() === "help") {
+      if (action === "help" || (!args.action && task.toLowerCase() === "help")) {
         return buildAutopilotUsage();
       }
 
@@ -89,6 +90,7 @@ export function createAutopilotTool(deps: AutopilotToolDeps) {
       const state = deps.createSessionState(context.sessionID, task, {
         maxContinues,
         workerAgent,
+        sessionMode: task ? "delegated-task" : "session-defaults",
       });
 
       Object.defineProperty(state, "permissionMode", {
@@ -114,7 +116,7 @@ export function createAutopilotTool(deps: AutopilotToolDeps) {
 
       await deps.onArmed(context.sessionID, state);
 
-      if (!task) {
+      if (state.session_mode === "session-defaults") {
         return `Autopilot is enabled in ${permissionMode} mode for this session. OpenCode will prefer reasonable defaults, ask fewer questions, and keep using ${workerAgent} for delegated work when you hand it a task.`;
       }
 

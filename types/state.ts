@@ -96,6 +96,7 @@ export interface ExtendedState {
   session_id: string;
   mode: AgentMode;
   phase: AgentPhase;
+  session_mode: "session-defaults" | "delegated-task";
   goal: string;
   plan_state: PlanState;
   completion_evidence: string[];

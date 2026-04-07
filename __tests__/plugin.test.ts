@@ -142,7 +142,10 @@ describe("Plugin Integration — event handler", () => {
   test("captures only worker-agent replies", async () => {
     const env = createTestEnv();
     const _state = env.armSession("s1", { workerAgent: "pi" });
-    const tracking = env.getTracking("s1")!;
+    const tracking = env.getTracking("s1");
+    if (!tracking) {
+      throw new Error("tracking should exist for an armed session");
+    }
     tracking.awaitingWorkerReply = true;
 
     // Worker agent message
@@ -329,7 +332,7 @@ describe("Plugin Integration — system transform", () => {
     expect(output.system[0]).toContain("Autopilot mode is active");
   });
 
-  test("suppresses system prompt for control-agent turns", async () => {
+  test("suppresses system prompt for optional orchestrator-agent turns", async () => {
     const env = createTestEnv();
     env.armSession("s1");
 
@@ -367,7 +370,7 @@ describe("Plugin Integration — tool.execute.after", () => {
 
     await env.toolAfterHook(
       {
-        tool: "autopilot_status",
+        tool: "autopilot",
         sessionID: "s1",
         callID: "c1",
         args: {},

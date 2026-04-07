@@ -55,7 +55,13 @@ export interface ControlLoopStep {
 export interface ControlLoopResult {
   finalState: ExtendedState;
   iterations: number;
-  stoppedBecause: "phase_stopped" | "phase_blocked" | "max_iterations" | "aborted" | "disabled";
+  stoppedBecause:
+    | "phase_stopped"
+    | "phase_blocked"
+    | "max_iterations"
+    | "aborted"
+    | "disabled"
+    | "queue_drained";
 }
 
 // ---------------------------------------------------------------------------
@@ -165,7 +171,10 @@ export async function runControlLoop(
     }
 
     // ---- Dequeue next event ----
-    const event = eventQueue.shift()!;
+    const event = eventQueue.shift();
+    if (!event) {
+      break;
+    }
     iteration++;
 
     // ---- Reduce ----
@@ -250,13 +259,13 @@ export async function runControlLoop(
       ? state.phase === "STOPPED"
         ? "phase_stopped"
         : "phase_blocked"
-      : "max_iterations",
+      : "queue_drained",
   };
 }
 
 /**
  * Convenience function to send an INTERRUPT into a running loop's state.
- * This is used by the `autopilot_stop` tool to force the loop to halt.
+ * This is used by the `autopilot` control tool to force the loop to halt.
  *
  * Returns the reducer result so the caller can update the shared state.
  */

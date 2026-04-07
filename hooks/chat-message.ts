@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// chat.message hook — tracks control-agent turns for suppression
+// chat.message hook — tracks optional autopilot orchestrator turns for suppression
 // ---------------------------------------------------------------------------
 
 export const CONTROL_AGENT = "autopilot";

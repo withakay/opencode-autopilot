@@ -13,6 +13,7 @@ export interface CreateInitialStateOptions {
   sessionID?: string;
   mode?: AgentMode;
   phase?: AgentPhase;
+  sessionMode?: ExtendedState["session_mode"];
   allowedTools?: string[];
   allowedPaths?: string[];
   maxContinues?: number;
@@ -101,6 +102,7 @@ export function createInitialState(
     session_id: sessionID,
     mode: options.mode ?? "DISABLED",
     phase: options.phase ?? "STOPPED",
+    session_mode: options.sessionMode ?? "delegated-task",
     goal,
     plan_state: createPlanState(),
     completion_evidence: [],
@@ -141,5 +143,6 @@ export function createSessionState(
     sessionID,
     mode: options.mode ?? "ENABLED",
     phase: options.phase ?? "OBSERVE",
+    sessionMode: options.sessionMode ?? "delegated-task",
   });
 }

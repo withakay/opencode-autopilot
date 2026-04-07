@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
-// tool.execute.after hook — strips autopilot markers from status output
+// tool.execute.after hook — strips autopilot markers from autopilot tool output
 // ---------------------------------------------------------------------------
 
-const AUTOPILOT_STATUS_TOOL = "autopilot_status";
+const AUTOPILOT_TOOL = "autopilot";
 
 export interface ToolAfterHookDeps {
   stripMarker: (text: string) => string;
@@ -25,7 +25,7 @@ export function createToolAfterHook(
   deps: ToolAfterHookDeps,
 ): (input: ToolAfterInput, output: ToolAfterOutput) => Promise<void> {
   return async (input: ToolAfterInput, output: ToolAfterOutput): Promise<void> => {
-    if (input.tool !== AUTOPILOT_STATUS_TOOL) {
+    if (input.tool !== AUTOPILOT_TOOL) {
       return;
     }
 

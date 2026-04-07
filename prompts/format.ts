@@ -56,9 +56,14 @@ export function summarizeAutopilotState(state: ExtendedState | null | undefined)
   const status = [
     `phase=${state.phase}`,
     `mode=${state.mode}`,
+    `session_mode=${state.session_mode}`,
     `continues=${state.continuation_count}/${state.max_continues}`,
     `agent=${state.worker_agent}`,
   ];
+
+  if (state.session_mode === "delegated-task") {
+    status.push(`task=${JSON.stringify(state.goal)}`);
+  }
 
   if (state.stop_reason) {
     status.push(`stop=${state.stop_reason}`);

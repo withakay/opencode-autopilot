@@ -16,11 +16,7 @@ import {
 } from "./prompts/index.ts";
 import { createSessionState } from "./state/factory.ts";
 import { SessionCache } from "./state/session-cache.ts";
-import { createHelpTool } from "./tools/help.ts";
-import { createPromptTool } from "./tools/prompt.ts";
-import { createStartTool } from "./tools/start.ts";
-import { createStatusTool } from "./tools/status.ts";
-import { createStopTool } from "./tools/stop.ts";
+import { createAutopilotTool } from "./tools/autopilot.ts";
 import type { ExtendedState } from "./types/index.ts";
 
 // ---------------------------------------------------------------------------
@@ -158,7 +154,8 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
     if (
       state.phase === "OBSERVE" &&
       state.continuation_count === 0 &&
-      !tracking.lastAssistantMessageID
+      !tracking.lastAssistantMessageID &&
+      state.goal.trim().length > 0
     ) {
       recordHistory(sessionID, `Starting task with ${state.worker_agent}`);
       await safeToast({
@@ -297,58 +294,57 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
   });
 
   // -- Build tools --
-  const startTool = createStartTool({
+  const stopSession = (sessionID: string, reason: string | undefined) => {
+    const state = getState(sessionID);
+    if (!state) return;
+    state.mode = "DISABLED";
+    state.phase = "STOPPED";
+    state.stop_reason = "USER_STOP";
+    recordHistory(sessionID, reason ? `Cancelled by user: ${reason}` : "Cancelled by user");
+  };
+
+  const autopilotTool = createAutopilotTool({
     getState,
     setState,
     createSessionState,
     normalizeMaxContinues,
     initSession,
+    summarizeState: summarizeAutopilotState,
+    getHistory: (sessionID) => historyBySession.get(sessionID) ?? [],
+    onStop: stopSession,
     defaultWorkerAgent: AUTOPILOT_FALLBACK_AGENT,
     onArmed: async (sessionID, state) => {
-      // Extract and store permissionMode
       const pm = (state as unknown as Record<string, unknown>).permissionMode;
       if (pm === "allow-all" || pm === "limited") {
         permissionModeBySession.set(sessionID, pm);
       } else {
         permissionModeBySession.set(sessionID, "limited");
       }
+
+      if (state.goal.trim().length > 0) {
+        recordHistory(
+          sessionID,
+          `Delegated task armed in ${permissionModeBySession.get(sessionID)} mode with ${state.worker_agent}.`,
+        );
+        recordHistory(sessionID, `Continuation limit: ${state.max_continues}.`);
+        return;
+      }
+
       recordHistory(
         sessionID,
-        `Armed in ${permissionModeBySession.get(sessionID)} mode with ${state.worker_agent}.`,
+        `Session autopilot enabled in ${permissionModeBySession.get(sessionID)} mode.`,
       );
-      recordHistory(sessionID, `Continuation limit: ${state.max_continues}.`);
+      recordHistory(
+        sessionID,
+        `Delegate agent ready: ${state.worker_agent}. Long-running tasks will use this agent.`,
+      );
     },
   });
-
-  const statusTool = createStatusTool({
-    getState,
-    summarizeState: summarizeAutopilotState,
-    getHistory: (sessionID) => historyBySession.get(sessionID) ?? [],
-  });
-
-  const stopTool = createStopTool({
-    getState,
-    onStop: (sessionID, reason) => {
-      const state = getState(sessionID);
-      if (!state) return;
-      state.mode = "DISABLED";
-      state.phase = "STOPPED";
-      state.stop_reason = "USER_STOP";
-      recordHistory(sessionID, reason ? `Cancelled by user: ${reason}` : "Cancelled by user");
-    },
-  });
-
-  const helpTool = createHelpTool();
-  const promptTool = createPromptTool();
 
   // -- Return assembled hooks --
   return {
     tool: {
-      autopilot_start: startTool,
-      autopilot_status: statusTool,
-      autopilot_stop: stopTool,
-      autopilot_help: helpTool,
-      autopilot_prompt: promptTool,
+      autopilot: autopilotTool,
     },
 
     event: eventHandler,

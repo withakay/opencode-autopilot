@@ -1,6 +1,6 @@
 # @withakay/opencode-autopilot
 
-Autopilot mode plugin for OpenCode — autonomous multi-step task execution with safety guarantees.
+Autopilot plugin for OpenCode — session-scoped autonomy defaults plus optional delegated long-running work.
 
 ## Installation
 
@@ -22,49 +22,57 @@ Register the plugin in your `opencode.jsonc`:
 }
 ```
 
-The plugin registers five tools:
+The plugin registers a single `autopilot` control tool:
 
-- **`autopilot_start`** — Arm autopilot mode for the current session
-- **`autopilot_status`** — Show autopilot status for the current session
-- **`autopilot_stop`** — Stop autopilot mode for the current session
-- **`autopilot_help`** — Show usage instructions
-- **`autopilot_prompt`** — Get the control agent prompt (call at session start)
+- **`autopilot`** — Turn autopilot on or off, show status, or start a delegated task
 
-### Control Agent
+### Slash command entry point
 
-Create an agent in `opencode.jsonc` to control the plugin:
+OpenCode custom slash commands live in `.opencode/commands/`. This repo includes `/autopilot` at `/home/runner/work/opencode-autopilot/opencode-autopilot/.opencode/commands/autopilot.md`.
+
+After registering the plugin, the primary UX is:
+
+- **`/autopilot on`** — enable autopilot for the rest of the session
+- **`/autopilot off`** — disable autopilot
+- **`/autopilot status`** — inspect current state
+- **`/autopilot <task>`** — enable autopilot and delegate a long-running task immediately
+
+If you prefer to call the tool directly, use:
 
 ```jsonc
 {
-  "agent": {
-    "autopilot": {
-      "description": "Control agent for autopilot plugin",
-      "mode": "primary",
-      "temperature": 0,
-      "tools": {
-        "autopilot_start": true,
-        "autopilot_status": true,
-        "autopilot_stop": true,
-        "autopilot_help": true,
-        "autopilot_prompt": true
-      }
-    }
+  "tool": {
+    "autopilot": true
   }
 }
 ```
 
-The agent should call `autopilot_prompt` at the start of each session to get its operating instructions.
+Examples:
 
-Then switch to the Autopilot agent and send your task.
+- `autopilot(action="on")`
+- `autopilot(action="status")`
+- `autopilot(task="Fix the failing tests", workerAgent="build-high")`
+
+### Optional orchestrator agent
+
+Autopilot no longer requires a dedicated control agent, but delegated work still runs through a configured agent (`general` by default). You can think of that agent as the orchestrator or overwatch worker that keeps a long-running task moving after `/autopilot <task>`.
 
 ### Permission Modes
 
 - **`limited`** (default) — Auto-denies all permission requests; blocks on first denial
 - **`allow-all`** — Auto-allows all permission requests
 
+### Question handling
+
+OpenCode currently exposes direct permission interception but not a general question-timeout hook through the plugin API. This plugin therefore:
+
+- auto-handles permission prompts according to the selected permission mode
+- pushes the active agent to prefer recommended defaults and keep moving when autopilot is on
+- still escalates to the user when no safe default exists
+
 ## Architecture
 
-The plugin implements an OODA (Observe-Orient-Decide-Act) control loop with a formal state machine.
+The plugin implements a session-scoped autonomy layer plus a delegated-task continuation loop with a formal state machine.
 
 ### State Machine Phases
 
@@ -137,7 +145,7 @@ src/
     index.ts, event-handler.ts, permission.ts,
     system-transform.ts, chat-message.ts, tool-after.ts
   tools/                        # Tool definitions
-    index.ts, help.ts, start.ts, status.ts, stop.ts
+    index.ts, autopilot.ts, usage.ts
   __tests__/                    # All test files
     helpers.ts, reducer.test.ts, events.test.ts,
     effects.test.ts, prompts.test.ts, plugin.test.ts,

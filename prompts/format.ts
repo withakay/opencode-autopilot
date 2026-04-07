@@ -53,12 +53,18 @@ export function summarizeAutopilotState(state: ExtendedState | null | undefined)
     return "Autopilot is idle.";
   }
 
+  const sessionMode = state.goal.trim().length > 0 ? "delegated-task" : "session-defaults";
   const status = [
     `phase=${state.phase}`,
     `mode=${state.mode}`,
+    `session_mode=${sessionMode}`,
     `continues=${state.continuation_count}/${state.max_continues}`,
     `agent=${state.worker_agent}`,
   ];
+
+  if (state.goal.trim().length > 0) {
+    status.push(`task=${JSON.stringify(state.goal)}`);
+  }
 
   if (state.stop_reason) {
     status.push(`stop=${state.stop_reason}`);

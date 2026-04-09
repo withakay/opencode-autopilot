@@ -10,6 +10,27 @@ npm install @withakay/opencode-autopilot
 bun add @withakay/opencode-autopilot
 ```
 
+### What gets installed for end users
+
+On install, the package runs a postinstall script that provisions OpenCode assets into the consuming project:
+
+- `.opencode/commands/autopilot.md` — the `/autopilot` slash command
+- `.opencode/agents/Autopilot-Wingman-GLM51.md`
+- `.opencode/agents/Autopilot-Wingman-Kimi25.md`
+- `.opencode/agents/Autopilot-Wingman-MiniMax25.md`
+- `.opencode/agents/Autopilot-Wingman-GH-GPT54.md`
+- `.opencode/agents/Autopilot-Wingman-GH-Gemini31.md`
+- `.opencode/agents/Autopilot-Wingman-GH-Sonnet46.md`
+- `.opencode/wingman-config.json` — routing/reference config for the packaged Wingman presets
+
+The installer is non-destructive for Wingman assets:
+
+- existing Wingman agent files are preserved if you have customized them
+- existing `wingman-config.json` is preserved if you have customized it
+- the `/autopilot` slash command is updated to the packaged version when it changes
+
+This package does **not** dynamically register slash commands or agents through the plugin API. Instead, it installs the corresponding OpenCode markdown assets into your project so they are available to end users immediately.
+
 ## Usage
 
 Register the plugin in your `opencode.jsonc`:
@@ -28,7 +49,7 @@ The plugin registers a single `autopilot` control tool:
 
 ### Slash command entry point
 
-OpenCode custom slash commands live in `.opencode/commands/`. This repo includes `/autopilot` at `/home/runner/work/opencode-autopilot/opencode-autopilot/.opencode/commands/autopilot.md`.
+OpenCode custom slash commands live in `.opencode/commands/`. This repo includes `/autopilot` at `.opencode/commands/autopilot.md`.
 
 After registering the plugin, the primary UX is:
 
@@ -36,6 +57,25 @@ After registering the plugin, the primary UX is:
 - **`/autopilot off`** — disable autopilot
 - **`/autopilot status`** — inspect current state
 - **`/autopilot <task>`** — enable autopilot and delegate a long-running task immediately
+
+### Packaged Wingman agents
+
+The package also installs a set of reusable Wingman agents in `.opencode/agents/` for delegated work. These can be referenced by name when you want autopilot to use a specific worker agent.
+
+Available packaged agents:
+
+- `Autopilot-Wingman-GLM51`
+- `Autopilot-Wingman-Kimi25`
+- `Autopilot-Wingman-MiniMax25`
+- `Autopilot-Wingman-GH-GPT54`
+- `Autopilot-Wingman-GH-Gemini31`
+- `Autopilot-Wingman-GH-Sonnet46`
+
+Example direct tool usage with a packaged Wingman:
+
+- `autopilot(task="Fix the failing tests", workerAgent="Autopilot-Wingman-GH-Sonnet46")`
+- `autopilot(task="Refactor the reducer logic", workerAgent="Autopilot-Wingman-Kimi25")`
+- `autopilot(task="Summarize the architecture", workerAgent="Autopilot-Wingman-GH-Gemini31")`
 
 If you prefer to call the tool directly, use:
 
@@ -52,10 +92,21 @@ Examples:
 - `autopilot(action="on")`
 - `autopilot(action="status")`
 - `autopilot(task="Fix the failing tests", workerAgent="build-high")`
+- `autopilot(action="on", autonomousStrength="aggressive")`
 
 ### Optional orchestrator agent
 
 Autopilot no longer requires a dedicated control agent, but delegated work still runs through a configured agent (`general` by default). You can think of that agent as the orchestrator or overwatch worker that keeps a long-running task moving after `/autopilot <task>`.
+
+### Autonomous Strength Modes
+
+Control how strongly autopilot biases toward autonomous decision-making:
+
+- **`conservative`** — Soft guidance to prefer defaults; asks when unsure (similar to previous behavior)
+- **`balanced`** (default) — Stronger bias toward selecting recommended/safe defaults with minimal user interaction
+- **`aggressive`** — Always pick recommended/safe defaults for routine choices; only escalate high-impact decisions (data deletion, major refactors) or security/safety risks
+
+The autonomous strength affects the system prompt guidance injected into the agent's context. Aggressive mode includes explicit rules to select recommended defaults without asking, while conservative mode provides softer suggestions.
 
 ### Permission Modes
 
@@ -67,8 +118,10 @@ Autopilot no longer requires a dedicated control agent, but delegated work still
 OpenCode currently exposes direct permission interception but not a general question-timeout hook through the plugin API. This plugin therefore:
 
 - auto-handles permission prompts according to the selected permission mode
-- pushes the active agent to prefer recommended defaults and keep moving when autopilot is on
-- still escalates to the user when no safe default exists
+- injects system prompt guidance based on the autonomous strength setting to bias the agent toward recommended defaults
+- still escalates to the user when no safe default exists or for high-impact decisions
+
+The autonomous strength parameter controls how strongly this guidance is worded. In aggressive mode, the system prompt explicitly instructs the agent to always select recommended/safe defaults for routine choices (file paths, variable names, configurations) without asking the user.
 
 ## Architecture
 

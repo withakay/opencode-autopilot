@@ -2,6 +2,7 @@ import type {
   AgentMode,
   AgentPhase,
   ApprovalState,
+  AutonomousStrength,
   ContextState,
   ExtendedState,
   PlanState,
@@ -18,6 +19,7 @@ export interface CreateInitialStateOptions {
   allowedPaths?: string[];
   maxContinues?: number;
   workerAgent?: string;
+  autonomousStrength?: AutonomousStrength;
   remainingBudget?: number | null;
   contextThreshold?: number;
   maxStepRetries?: number;
@@ -33,6 +35,7 @@ const DEFAULT_MAX_STEP_RETRIES = 2;
 const DEFAULT_MAX_GLOBAL_RETRIES = 6;
 const DEFAULT_MAX_NO_PROGRESS = 3;
 const DEFAULT_WORKER_AGENT = "pi";
+const DEFAULT_AUTONOMOUS_STRENGTH: AutonomousStrength = "balanced";
 
 function createPlanState(): PlanState {
   return {
@@ -128,6 +131,7 @@ export function createInitialState(
     continuation_count: 0,
     max_continues: options.maxContinues ?? DEFAULT_MAX_CONTINUES,
     worker_agent: options.workerAgent ?? DEFAULT_WORKER_AGENT,
+    autonomous_strength: options.autonomousStrength ?? DEFAULT_AUTONOMOUS_STRENGTH,
     last_updated_at: null,
     resumable: true,
   };

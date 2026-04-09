@@ -92,6 +92,8 @@ export interface LatestObservations {
   last_interrupt: EventEnvelope<"INTERRUPT"> | null;
 }
 
+export type AutonomousStrength = "conservative" | "balanced" | "aggressive";
+
 export interface ExtendedState {
   session_id: string;
   mode: AgentMode;
@@ -113,6 +115,7 @@ export interface ExtendedState {
   continuation_count: number;
   max_continues: number;
   worker_agent: string;
+  autonomous_strength: AutonomousStrength;
   last_updated_at: string | null;
   resumable: boolean;
 }

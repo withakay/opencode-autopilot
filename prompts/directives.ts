@@ -1,4 +1,4 @@
-export type AutopilotDirectiveStatus = "continue" | "complete" | "blocked";
+export type AutopilotDirectiveStatus = "continue" | "validate" | "complete" | "blocked";
 
 export interface AutopilotDirective {
   status: AutopilotDirectiveStatus;
@@ -6,7 +6,7 @@ export interface AutopilotDirective {
 }
 
 const AUTOPILOT_MARKER_RE =
-  /\n?<autopilot\s+status="(continue|complete|blocked)">([\s\S]*?)<\/autopilot>\s*$/i;
+  /\n?<autopilot\s+status="(continue|validate|complete|blocked)">([\s\S]*?)<\/autopilot>\s*$/i;
 const BLOCKED_HINT_RE =
   /(need (more|additional) information|cannot continue|can't continue|blocked|waiting for user|please provide|which option|what should i|what would you like)/i;
 
@@ -69,6 +69,10 @@ function defaultReason(status: AutopilotDirectiveStatus): string {
 
   if (status === "blocked") {
     return "Task is blocked.";
+  }
+
+  if (status === "validate") {
+    return "Task needs validation before marking complete.";
   }
 
   return "More work remains.";

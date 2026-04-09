@@ -36,6 +36,7 @@ export type { AgentPhase } from "./phase.ts";
 export type { ReducerResult } from "./reducer.ts";
 export type {
   ApprovalState,
+  AutonomousStrength,
   BackgroundTask,
   ContextState,
   ExtendedState,

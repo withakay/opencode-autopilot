@@ -17,3 +17,10 @@ export {
   normalizeMaxContinues,
 } from "./normalize.ts";
 export { buildAutopilotSystemPrompt } from "./system-prompt.ts";
+export type { WingmanConfig, WingmanRole } from "./wingman.ts";
+export {
+  allWingmenPass,
+  buildCoordinationPrompt,
+  buildWingmanPrompt,
+  parseWingmanOutput,
+} from "./wingman.ts";

@@ -199,6 +199,27 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
       return;
     }
 
+    if (directive.status === "validate") {
+      // Task thinks it's done but needs verification - continue to validate
+      state.continuation_count += 1;
+      await safeToast({
+        title: "Autopilot validating",
+        message: "Verifying task completion before finalizing",
+        variant: "info",
+      });
+      await dispatchPrompt(
+        sessionID,
+        state,
+        buildContinuationPrompt({
+          continueCount: state.continuation_count,
+          maxContinues: state.max_continues,
+          task: state.goal,
+          isValidation: true,
+        }),
+      );
+      return;
+    }
+
     // Check continuation limit
     if (state.continuation_count >= state.max_continues) {
       await setStopped(

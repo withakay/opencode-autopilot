@@ -9,6 +9,7 @@ import {
   parseAutopilotMarker,
   stripAutopilotMarker,
 } from "../prompts/index.ts";
+import { buildAutopilotSystemPrompt } from "../prompts/system-prompt.ts";
 
 describe("normalizeMaxContinues", () => {
   test("falls back for invalid input", () => {
@@ -78,5 +79,47 @@ describe("buildContinuationPrompt", () => {
 
     expect(prompt).toContain("Autopilot continuation 2/5.");
     expect(prompt).toContain("Original task: Fix the failing tests");
+  });
+});
+
+describe("buildAutopilotSystemPrompt", () => {
+  test("conservative mode uses soft guidance", () => {
+    const prompt = buildAutopilotSystemPrompt("conservative");
+
+    expect(prompt).toContain("Autopilot mode is active");
+    expect(prompt).toContain("ask fewer follow-up questions");
+    expect(prompt).toContain("Prefer the recommended or safest reasonable default");
+    expect(prompt).not.toContain("CRITICAL");
+    expect(prompt).not.toContain("ALWAYS select");
+  });
+
+  test("balanced mode uses stronger guidance", () => {
+    const prompt = buildAutopilotSystemPrompt("balanced");
+
+    expect(prompt).toContain("Autopilot mode is active");
+    expect(prompt).toContain("Work autonomously");
+    expect(prompt).toContain("select the recommended or safest default");
+    expect(prompt).toContain("minimal user interaction");
+  });
+
+  test("aggressive mode uses strongest guidance with explicit auto-selection rules", () => {
+    const prompt = buildAutopilotSystemPrompt("aggressive");
+
+    expect(prompt).toContain("Autopilot mode is active");
+    expect(prompt).toContain("CRITICAL");
+    expect(prompt).toContain("ALWAYS select the recommended or safest default");
+    expect(prompt).toContain("DO NOT ask the user");
+    expect(prompt).toContain("high-impact irreversible decision");
+  });
+
+  test("all modes include status marker instructions", () => {
+    const conservative = buildAutopilotSystemPrompt("conservative");
+    const balanced = buildAutopilotSystemPrompt("balanced");
+    const aggressive = buildAutopilotSystemPrompt("aggressive");
+
+    for (const prompt of [conservative, balanced, aggressive]) {
+      expect(prompt).toContain('<autopilot status="continue|validate|complete|blocked">');
+      expect(prompt).toContain("Do not omit the marker");
+    }
   });
 });

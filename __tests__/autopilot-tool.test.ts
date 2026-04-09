@@ -119,4 +119,52 @@ describe("Autopilot Tool", () => {
     expect(result).toContain("Autopilot stopped");
     expect(stoppedReason).toBe("manual takeover");
   });
+
+  test("accepts autonomousStrength parameter and sets it in state", async () => {
+    const stateMap = new Map<string, ExtendedState>();
+
+    const tool = createAutopilotTool({
+      getState: (sessionID) => stateMap.get(sessionID),
+      setState: (sessionID, state) => {
+        stateMap.set(sessionID, state);
+      },
+      createSessionState,
+      normalizeMaxContinues: () => 10,
+      initSession: () => {},
+      onArmed: async () => {},
+      summarizeState: () => "unused",
+      getHistory: () => [],
+      onStop: () => {},
+      defaultWorkerAgent: "general",
+    });
+
+    await tool.execute({ action: "on", autonomousStrength: "aggressive" }, createToolContext());
+
+    const state = stateMap.get("s1");
+    expect(state?.autonomous_strength).toBe("aggressive");
+  });
+
+  test("defaults autonomousStrength to balanced when not specified", async () => {
+    const stateMap = new Map<string, ExtendedState>();
+
+    const tool = createAutopilotTool({
+      getState: (sessionID) => stateMap.get(sessionID),
+      setState: (sessionID, state) => {
+        stateMap.set(sessionID, state);
+      },
+      createSessionState,
+      normalizeMaxContinues: () => 10,
+      initSession: () => {},
+      onArmed: async () => {},
+      summarizeState: () => "unused",
+      getHistory: () => [],
+      onStop: () => {},
+      defaultWorkerAgent: "general",
+    });
+
+    await tool.execute({ action: "on" }, createToolContext());
+
+    const state = stateMap.get("s1");
+    expect(state?.autonomous_strength).toBe("balanced");
+  });
 });

@@ -3,11 +3,15 @@
 // Injects autopilot system prompt for worker turns, suppresses for control turns
 // ---------------------------------------------------------------------------
 
+import type { AutonomousStrength } from "../types/state.ts";
+
 export interface SystemTransformHookDeps {
-  getState: (sessionID: string) => { mode: "DISABLED" | "ENABLED" } | undefined;
+  getState: (
+    sessionID: string,
+  ) => { mode: "DISABLED" | "ENABLED"; autonomous_strength: AutonomousStrength } | undefined;
   getSuppressCount: (sessionID: string) => number;
   decrementSuppressCount: (sessionID: string) => void;
-  buildSystemPrompt: () => string;
+  buildSystemPrompt: (strength: AutonomousStrength) => string;
 }
 
 interface SystemTransformInput {
@@ -48,6 +52,6 @@ export function createSystemTransformHook(
       output.system = [];
     }
 
-    output.system.push(buildSystemPrompt());
+    output.system.push(buildSystemPrompt(state.autonomous_strength));
   };
 }

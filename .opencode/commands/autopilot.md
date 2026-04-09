@@ -15,5 +15,6 @@ Additional parsing rules:
 - If the user includes `limited`, set `permissionMode` to `limited`
 - If the user includes a continuation cap such as `max 3`, `max=3`, or `continue 3 times`, pass it as `maxContinues`
 - If the user includes `agent <name>`, `use <name>`, or `agent=<name>`, pass it as `workerAgent`
+- If the user includes `conservative`, `balanced`, or `aggressive`, pass it as `autonomousStrength`
 
 Return only the tool result.

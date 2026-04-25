@@ -180,29 +180,6 @@ export function createEventHandler(
         deleteState(info.id);
         return;
       }
-
-      case "permission.updated": {
-        const sessionID = event.properties.sessionID;
-        if (!isString(sessionID)) return;
-
-        const state = getState(sessionID);
-        const tracking = getTracking(sessionID);
-
-        if (!state || state.mode !== "ENABLED" || !tracking) return;
-
-        // In limited mode, a permission being asked implies it was denied
-        // (since our permission.ask hook denies it). Record the block.
-        tracking.blockedByPermission = true;
-        const permType = isString(event.properties.type) ? event.properties.type : "unknown";
-        const patterns = event.properties.pattern;
-        const patternStr = Array.isArray(patterns)
-          ? patterns.filter(isString).join(", ")
-          : isString(patterns)
-            ? patterns
-            : "";
-        tracking.permissionBlockMessage = `Denied ${permType} ${patternStr}`.trim();
-        return;
-      }
     }
   };
 }

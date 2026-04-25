@@ -1,12 +1,6 @@
-// ---------------------------------------------------------------------------
-// chat.message hook — tracks optional autopilot orchestrator turns for suppression
-// ---------------------------------------------------------------------------
-
-export const CONTROL_AGENT = "autopilot";
-
 export interface ChatMessageHookDeps {
   getState: (sessionID: string) => { mode: "DISABLED" | "ENABLED" } | undefined;
-  incrementSuppressCount: (sessionID: string) => void;
+  setPendingAgent: (sessionID: string, agent: string | undefined) => void;
 }
 
 interface ChatMessageInput {
@@ -25,17 +19,13 @@ interface ChatMessageOutput {
 export function createChatMessageHook(
   deps: ChatMessageHookDeps,
 ): (input: ChatMessageInput, output: ChatMessageOutput) => Promise<void> {
-  const { getState, incrementSuppressCount } = deps;
-
   return async (input: ChatMessageInput, _output: ChatMessageOutput): Promise<void> => {
-    const state = getState(input.sessionID);
+    const state = deps.getState(input.sessionID);
 
     if (!state || state.mode !== "ENABLED") {
       return;
     }
 
-    if (input.agent === CONTROL_AGENT) {
-      incrementSuppressCount(input.sessionID);
-    }
+    deps.setPendingAgent(input.sessionID, input.agent);
   };
 }

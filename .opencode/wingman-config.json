@@ -1,0 +1,85 @@
+{
+  "$schema": "./wingman-config.schema.json",
+  "description": "Autopilot Wingman Configuration - Define subagents with specific models",
+  "wingmen": {
+    "Autopilot-Wingman-GLM51": {
+      "description": "Fast, efficient general-purpose assistant",
+      "model": {
+        "provider": "chutes",
+        "model": "chutes/zai-org/GLM-5.1-TEE"
+      },
+      "strength": "balanced",
+      "roles": ["general", "quick-tasks", "drafting"]
+    },
+    "Autopilot-Wingman-Kimi25": {
+      "description": "Strong reasoning and coding capabilities",
+      "model": {
+        "provider": "chutes",
+        "model": "chutes/moonshotai/Kimi-K2.5-TEE"
+      },
+      "strength": "aggressive",
+      "roles": ["coding", "analysis", "refactoring"]
+    },
+    "Autopilot-Wingman-MiniMax25": {
+      "description": "Balanced performance for most tasks",
+      "model": {
+        "provider": "chutes",
+        "model": "chutes/MiniMaxAI/MiniMax-M2.5-TEE"
+      },
+      "strength": "balanced",
+      "roles": ["general", "testing", "documentation"]
+    },
+    "Autopilot-Wingman-GH-GPT54": {
+      "description": "Latest GPT model via GitHub Copilot",
+      "model": {
+        "provider": "github-copilot",
+        "model": "github-copilot/gpt-5.4"
+      },
+      "strength": "balanced",
+      "roles": ["complex-reasoning", "architecture", "planning"]
+    },
+    "Autopilot-Wingman-GH-Gemini31": {
+      "description": "Google Gemini Pro for multimodal tasks",
+      "model": {
+        "provider": "github-copilot",
+        "model": "github-copilot/gemini-3.1-pro-preview"
+      },
+      "strength": "aggressive",
+      "roles": ["large-context", "documentation", "research"]
+    },
+    "Autopilot-Wingman-GH-Sonnet46": {
+      "description": "Claude Sonnet for careful, thorough work",
+      "model": {
+        "provider": "github-copilot",
+        "model": "github-copilot/claude-sonnet-4.6"
+      },
+      "strength": "conservative",
+      "roles": ["code-review", "validation", "safety-critical"]
+    }
+  },
+  "routing": {
+    "default": "Autopilot-Wingman-Kimi25",
+    "rules": [
+      {
+        "taskPattern": "test|spec|validate",
+        "wingman": "Autopilot-Wingman-GH-Sonnet46"
+      },
+      {
+        "taskPattern": "refactor|clean|simplify",
+        "wingman": "Autopilot-Wingman-Kimi25"
+      },
+      {
+        "taskPattern": "document|readme|explain",
+        "wingman": "Autopilot-Wingman-GH-Gemini31"
+      },
+      {
+        "taskPattern": "quick|simple|draft",
+        "wingman": "Autopilot-Wingman-GLM51"
+      },
+      {
+        "taskPattern": "design|architecture|plan",
+        "wingman": "Autopilot-Wingman-GH-GPT54"
+      }
+    ]
+  }
+}

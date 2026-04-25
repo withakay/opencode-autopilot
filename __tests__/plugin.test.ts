@@ -1,8 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { CONTROL_AGENT, createChatMessageHook } from "../hooks/chat-message.ts";
+import type { AutopilotConfig } from "../config/autopilot-config.ts";
+import { createChatMessageHook } from "../hooks/chat-message.ts";
 import type { SessionTracking } from "../hooks/event-handler.ts";
 import { createEventHandler, createSessionTracking } from "../hooks/event-handler.ts";
 import { createPermissionHook } from "../hooks/permission.ts";
+import { createSessionCompactingHook } from "../hooks/session-compacting.ts";
 import { createSystemTransformHook } from "../hooks/system-transform.ts";
 import { createToolAfterHook } from "../hooks/tool-after.ts";
 import { buildAutopilotSystemPrompt, stripAutopilotMarker } from "../prompts/index.ts";
@@ -17,8 +19,9 @@ import type { ExtendedState } from "../types/index.ts";
 function createTestEnv() {
   const stateMap = new Map<string, ExtendedState>();
   const trackingMap = new Map<string, SessionTracking>();
-  const suppressCountMap = new Map<string, number>();
   const permissionModeMap = new Map<string, "allow-all" | "limited">();
+  const historyMap = new Map<string, string[]>();
+  const pendingAgentMap = new Map<string, string | undefined>();
   const sessionCache = new SessionCache();
 
   const getState = (sid: string) => stateMap.get(sid);
@@ -32,6 +35,19 @@ function createTestEnv() {
   let errorCallbackSid: string | undefined;
   let errorCallbackError: unknown;
   const deniedPermissions: Array<{ sessionID: string; type: string }> = [];
+  const config: AutopilotConfig = {
+    promptInjection: {
+      system: ["Follow the active spec workflow."],
+      compaction: ["Carry the workflow state forward."],
+    },
+    workflow: {
+      name: "SpecFlow",
+      phase: "implement",
+      goal: "Finish the feature",
+      doneCriteria: ["tests pass"],
+      nextActions: ["implement code"],
+    },
+  };
 
   const eventHandler = createEventHandler({
     getState,
@@ -57,19 +73,30 @@ function createTestEnv() {
 
   const systemTransformHook = createSystemTransformHook({
     getState,
-    getSuppressCount: (sid) => suppressCountMap.get(sid) ?? 0,
-    decrementSuppressCount: (sid) => {
-      const c = suppressCountMap.get(sid) ?? 0;
-      if (c > 0) suppressCountMap.set(sid, c - 1);
+    consumePendingAgent: (sid) => {
+      const agent = pendingAgentMap.get(sid);
+      pendingAgentMap.delete(sid);
+      return agent;
     },
+    getConfig: () => config,
     buildSystemPrompt: buildAutopilotSystemPrompt,
   });
 
   const chatMessageHook = createChatMessageHook({
     getState,
-    incrementSuppressCount: (sid) => {
-      const c = suppressCountMap.get(sid) ?? 0;
-      suppressCountMap.set(sid, c + 1);
+    setPendingAgent: (sid, agent) => {
+      pendingAgentMap.set(sid, agent);
+    },
+  });
+
+  const sessionCompactingHook = createSessionCompactingHook({
+    getState,
+    getHistory: (sid) => historyMap.get(sid) ?? [],
+    getConfig: () => config,
+    summarizeWorkflow: (currentConfig) => {
+      const workflow = currentConfig.workflow;
+      if (!workflow) return [];
+      return [`Active workflow: ${workflow.name}`, `Current phase: ${workflow.phase}`];
     },
   });
 
@@ -84,28 +111,32 @@ function createTestEnv() {
       goal?: string;
       permissionMode?: "allow-all" | "limited";
       workerAgent?: string;
+      sessionMode?: ExtendedState["session_mode"];
     } = {},
   ) {
     const state = createSessionState(sessionID, opts.goal ?? "test task", {
       workerAgent: opts.workerAgent ?? "pi",
+      sessionMode: opts.sessionMode,
     });
     stateMap.set(sessionID, state);
     trackingMap.set(sessionID, createSessionTracking());
-    suppressCountMap.set(sessionID, 0);
     permissionModeMap.set(sessionID, opts.permissionMode ?? "limited");
+    historyMap.set(sessionID, ["armed"]);
     return state;
   }
 
   return {
     stateMap,
     trackingMap,
-    suppressCountMap,
     permissionModeMap,
+    historyMap,
+    pendingAgentMap,
     sessionCache,
     eventHandler,
     permissionHook,
-    systemTransformHook,
     chatMessageHook,
+    systemTransformHook,
+    sessionCompactingHook,
     toolAfterHook,
     armSession,
     getState,
@@ -321,26 +352,14 @@ describe("Plugin Integration — permission hook", () => {
 });
 
 describe("Plugin Integration — system transform", () => {
-  test("injects system prompt for worker turns", async () => {
+  test("injects delegated status prompt for worker turns", async () => {
     const env = createTestEnv();
-    env.armSession("s1");
+    env.armSession("s1", { workerAgent: "pi" });
 
-    const output = { system: [] as string[] };
-    await env.systemTransformHook({ sessionID: "s1", model: {} }, output);
-
-    expect(output.system).toHaveLength(1);
-    expect(output.system[0]).toContain("Autopilot mode is active");
-  });
-
-  test("suppresses system prompt for optional orchestrator-agent turns", async () => {
-    const env = createTestEnv();
-    env.armSession("s1");
-
-    // Simulate control agent turn
     await env.chatMessageHook(
       {
         sessionID: "s1",
-        agent: CONTROL_AGENT,
+        agent: "pi",
       },
       { message: {}, parts: [] },
     );
@@ -348,14 +367,75 @@ describe("Plugin Integration — system transform", () => {
     const output = { system: [] as string[] };
     await env.systemTransformHook({ sessionID: "s1", model: {} }, output);
 
-    // Suppressed — no prompt added
+    expect(output.system).toHaveLength(1);
+    const prompt = output.system[0];
+    if (!prompt) throw new Error("expected system prompt");
+    expect(prompt).toContain("Autopilot mode is active");
+    expect(prompt).toContain("Follow the active spec workflow.");
+    expect(prompt).toContain('<autopilot status="continue|validate|complete|blocked">');
+  });
+
+  test("skips delegated status prompt for non-worker turns", async () => {
+    const env = createTestEnv();
+    env.armSession("s1", { workerAgent: "pi" });
+
+    await env.chatMessageHook(
+      {
+        sessionID: "s1",
+        agent: "other-agent",
+      },
+      { message: {}, parts: [] },
+    );
+
+    const output = { system: [] as string[] };
+    await env.systemTransformHook({ sessionID: "s1", model: {} }, output);
+
     expect(output.system).toHaveLength(0);
+  });
 
-    // Next turn should inject again
-    const output2 = { system: [] as string[] };
-    await env.systemTransformHook({ sessionID: "s1", model: {} }, output2);
+  test("injects session-default autonomy guidance without status markers", async () => {
+    const env = createTestEnv();
+    env.armSession("s1", { sessionMode: "session-defaults" });
 
-    expect(output2.system).toHaveLength(1);
+    const output = { system: [] as string[] };
+    await env.systemTransformHook({ sessionID: "s1", model: {} }, output);
+
+    expect(output.system).toHaveLength(1);
+    const prompt = output.system[0];
+    if (!prompt) throw new Error("expected system prompt");
+    expect(prompt).toContain("Autopilot mode is active");
+    expect(prompt).toContain("Follow the active spec workflow.");
+    expect(prompt).not.toContain('<autopilot status="continue|validate|complete|blocked">');
+  });
+
+  test("does not inject system prompt for disabled sessions", async () => {
+    const env = createTestEnv();
+
+    const output = { system: [] as string[] };
+    await env.systemTransformHook({ sessionID: "s1", model: {} }, output);
+
+    expect(output.system).toHaveLength(0);
+  });
+});
+
+describe("Plugin Integration — session compacting", () => {
+  test("preserves autopilot continuation state during compaction", async () => {
+    const env = createTestEnv();
+    const state = env.armSession("s1", { workerAgent: "general" });
+    state.continuation_count = 3;
+    env.historyMap.set("s1", ["armed", "Continuation 3/10"]);
+
+    const output = { context: [] as string[] };
+    await env.sessionCompactingHook({ sessionID: "s1" }, output);
+
+    expect(output.context).toHaveLength(1);
+    const context = output.context[0];
+    if (!context) throw new Error("expected compaction context");
+    expect(context).toContain("Autopilot Continuation State");
+    expect(context).toContain("Continuation 3/");
+    expect(context).toContain("without routine confirmation questions");
+    expect(context).toContain("Active workflow: SpecFlow");
+    expect(context).toContain("Carry the workflow state forward.");
   });
 });
 

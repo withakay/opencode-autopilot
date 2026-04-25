@@ -1,7 +1,7 @@
 {
   "name": "@withakay/opencode-autopilot",
-  "version": "0.1.1",
-  "description": "Autopilot mode plugin for OpenCode - autonomous multi-step task execution with safety guarantees",
+  "version": "0.3.3",
+  "description": "Autopilot mode plugin for OpenCode - autonomous multi-step task continuation",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -14,7 +14,12 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    ".opencode/commands/autopilot.md",
+    ".opencode/agents/*.md",
+    ".opencode/wingman-config.json",
+    ".opencode/wingman-config.schema.json",
+    "scripts/install-slash-command.mjs"
   ],
   "scripts": {
     "build": "bun build ./index.ts --outdir ./dist --target node --sourcemap --external @opencode-ai/plugin --external @opencode-ai/sdk",
@@ -23,7 +28,8 @@
     "lint": "biome check .",
     "format": "biome format . --write",
     "check": "bun run lint && bun run typecheck",
-    "prepublishOnly": "bun run build"
+    "prepublishOnly": "bun run build",
+    "postinstall": "node scripts/install-slash-command.mjs"
   },
   "keywords": [
     "opencode",

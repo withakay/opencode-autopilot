@@ -1,5 +1,5 @@
 import { tool } from "@opencode-ai/plugin";
-import type { ExtendedState } from "../types/index.ts";
+import type { AutonomousStrength, ExtendedState } from "../types/index.ts";
 import { buildAutopilotUsage } from "./usage.ts";
 
 export interface AutopilotToolDeps {
@@ -12,11 +12,16 @@ export interface AutopilotToolDeps {
       maxContinues?: number;
       sessionMode?: ExtendedState["session_mode"];
       workerAgent?: string;
+      autonomousStrength?: AutonomousStrength;
     },
   ) => ExtendedState;
   normalizeMaxContinues: (value: unknown) => number;
   initSession: (sessionID: string) => void;
-  onArmed: (sessionID: string, state: ExtendedState) => Promise<void>;
+  onArmed: (
+    sessionID: string,
+    state: ExtendedState,
+    permissionMode: "allow-all" | "limited",
+  ) => Promise<void>;
   summarizeState: (state: ExtendedState | null | undefined) => string;
   getHistory: (sessionID: string) => string[];
   onStop: (sessionID: string, reason: string | undefined) => void;
@@ -52,6 +57,12 @@ export function createAutopilotTool(deps: AutopilotToolDeps) {
         .string()
         .optional()
         .describe("Delegate agent used for long-running autopilot tasks"),
+      autonomousStrength: tool.schema
+        .enum(["conservative", "balanced", "aggressive"])
+        .optional()
+        .describe(
+          "How strongly autopilot prefers defaults: conservative (soft guidance), balanced (default, stronger guidance), aggressive (always pick recommended/safe defaults)",
+        ),
     },
     async execute(args, context) {
       const task = args.task?.trim() ?? "";
@@ -86,18 +97,13 @@ export function createAutopilotTool(deps: AutopilotToolDeps) {
       const maxContinues = deps.normalizeMaxContinues(args.maxContinues);
       const workerAgent =
         args.workerAgent?.trim() || deps.defaultWorkerAgent || AUTOPILOT_FALLBACK_AGENT;
+      const autonomousStrength = args.autonomousStrength ?? "balanced";
 
       const state = deps.createSessionState(context.sessionID, task, {
         maxContinues,
         workerAgent,
+        autonomousStrength,
         sessionMode: task ? "delegated-task" : "session-defaults",
-      });
-
-      Object.defineProperty(state, "permissionMode", {
-        value: permissionMode,
-        writable: true,
-        enumerable: true,
-        configurable: true,
       });
 
       deps.setState(context.sessionID, state);
@@ -110,11 +116,12 @@ export function createAutopilotTool(deps: AutopilotToolDeps) {
           permissionMode,
           maxContinues,
           workerAgent,
+          autonomousStrength,
           task: task || null,
         },
       });
 
-      await deps.onArmed(context.sessionID, state);
+      await deps.onArmed(context.sessionID, state, permissionMode);
 
       if (state.session_mode === "session-defaults") {
         return `Autopilot is enabled in ${permissionMode} mode for this session. OpenCode will prefer reasonable defaults, ask fewer questions, and keep using ${workerAgent} for delegated work when you hand it a task.`;

@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OpenCode Autopilot Wingman Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "description": { "type": "string" },
+    "wingmen": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["description", "model", "strength", "roles"],
+        "properties": {
+          "description": { "type": "string" },
+          "model": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["provider", "model"],
+            "properties": {
+              "provider": { "type": "string" },
+              "model": { "type": "string" }
+            }
+          },
+          "strength": {
+            "type": "string",
+            "enum": ["conservative", "balanced", "aggressive"]
+          },
+          "roles": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "routing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["default", "rules"],
+      "properties": {
+        "default": { "type": "string" },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["taskPattern", "wingman"],
+            "properties": {
+              "taskPattern": { "type": "string" },
+              "wingman": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  },
+  "required": ["wingmen", "routing"]
+}

@@ -90,6 +90,14 @@ async function installAssets() {
       label: "Wingman config",
     });
 
+    const wingmanSchemaSource = join(packageOpencodeRoot, "wingman-config.schema.json");
+    const wingmanSchemaTarget = join(projectOpencodeRoot, "wingman-config.schema.json");
+
+    await copyManagedFile(wingmanSchemaSource, wingmanSchemaTarget, {
+      updateIfDifferent: true,
+      label: "Wingman config schema",
+    });
+
     const packagedAgentsDir = join(packageOpencodeRoot, "agents");
     if (!existsSync(packagedAgentsDir)) {
       console.log("⚠️  No packaged Wingman agents directory found");

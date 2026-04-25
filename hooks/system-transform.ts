@@ -1,17 +1,27 @@
 // ---------------------------------------------------------------------------
 // experimental.chat.system.transform hook
-// Injects autopilot system prompt for worker turns, suppresses for control turns
+// Injects autopilot system prompt while autopilot is enabled.
 // ---------------------------------------------------------------------------
 
+import type { AutopilotConfig } from "../config/autopilot-config.ts";
 import type { AutonomousStrength } from "../types/state.ts";
 
 export interface SystemTransformHookDeps {
-  getState: (
-    sessionID: string,
-  ) => { mode: "DISABLED" | "ENABLED"; autonomous_strength: AutonomousStrength } | undefined;
-  getSuppressCount: (sessionID: string) => number;
-  decrementSuppressCount: (sessionID: string) => void;
-  buildSystemPrompt: (strength: AutonomousStrength) => string;
+  getState: (sessionID: string) =>
+    | {
+        mode: "DISABLED" | "ENABLED";
+        session_mode: "session-defaults" | "delegated-task";
+        worker_agent: string;
+        autonomous_strength: AutonomousStrength;
+      }
+    | undefined;
+  consumePendingAgent: (sessionID: string) => string | undefined;
+  getConfig: () => AutopilotConfig;
+  buildSystemPrompt: (
+    strength: AutonomousStrength,
+    includeStatusMarkers: boolean,
+    config: AutopilotConfig,
+  ) => string;
 }
 
 interface SystemTransformInput {
@@ -26,7 +36,7 @@ interface SystemTransformOutput {
 export function createSystemTransformHook(
   deps: SystemTransformHookDeps,
 ): (input: SystemTransformInput, output: SystemTransformOutput) => Promise<void> {
-  const { getState, getSuppressCount, decrementSuppressCount, buildSystemPrompt } = deps;
+  const { getState, consumePendingAgent, getConfig, buildSystemPrompt } = deps;
 
   return async (input: SystemTransformInput, output: SystemTransformOutput): Promise<void> => {
     const { sessionID } = input;
@@ -41,10 +51,12 @@ export function createSystemTransformHook(
       return;
     }
 
-    const suppressCount = getSuppressCount(sessionID);
-
-    if (suppressCount > 0) {
-      decrementSuppressCount(sessionID);
+    const pendingAgent = consumePendingAgent(sessionID);
+    if (
+      state.session_mode === "delegated-task" &&
+      pendingAgent !== undefined &&
+      pendingAgent !== state.worker_agent
+    ) {
       return;
     }
 
@@ -52,6 +64,12 @@ export function createSystemTransformHook(
       output.system = [];
     }
 
-    output.system.push(buildSystemPrompt(state.autonomous_strength));
+    output.system.push(
+      buildSystemPrompt(
+        state.autonomous_strength,
+        state.session_mode === "delegated-task",
+        getConfig(),
+      ),
+    );
   };
 }

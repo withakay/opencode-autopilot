@@ -1,3 +1,5 @@
+import type { AutopilotConfig } from "../config/autopilot-config.ts";
+
 export type AutopilotDirectiveStatus = "continue" | "validate" | "complete" | "blocked";
 
 export interface AutopilotDirective {
@@ -9,6 +11,12 @@ const AUTOPILOT_MARKER_RE =
   /\n?<autopilot\s+status="(continue|validate|complete|blocked)">([\s\S]*?)<\/autopilot>\s*$/i;
 const BLOCKED_HINT_RE =
   /(need (more|additional) information|cannot continue|can't continue|blocked|waiting for user|please provide|which option|what should i|what would you like)/i;
+const ROUTINE_CONFIRMATION_RE =
+  /(do you want me to|would you like me to|should i|shall i|want me to|should we|may i proceed|can i proceed)/i;
+const OBVIOUS_NEXT_STEP_RE =
+  /(next|continue|proceed|inspect|read|edit|update|fix|implement|refactor|verify|validate|run (the )?(tests|test|checks|build|lint|typecheck))/i;
+const HIGH_IMPACT_RE =
+  /(delete|destroy|drop( (table|database|schema))?|truncate|wipe|purge|overwrite|force.?push|production|staging|billing|payment|secret|credential|api.?key|token|env(ironment)?\s+var(iable)?|security|migration|schema.change|irreversible|one.way|cannot be undone|major refactor|breaking change)/i;
 
 export function parseAutopilotMarker(text: string): AutopilotDirective | null {
   const match = text.match(AUTOPILOT_MARKER_RE);
@@ -34,7 +42,19 @@ export function stripAutopilotMarker(text: string): string {
   return text.replace(AUTOPILOT_MARKER_RE, "").trimEnd();
 }
 
-export function inferAutopilotDirective(text: string): AutopilotDirective {
+function configRegex(patterns: string[] | undefined): RegExp | null {
+  if (!patterns || patterns.length === 0) {
+    return null;
+  }
+
+  const escaped = patterns.map((pattern) => pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  return new RegExp(escaped.join("|"), "i");
+}
+
+export function inferAutopilotDirective(
+  text: string,
+  config: AutopilotConfig = {},
+): AutopilotDirective {
   const marker = parseAutopilotMarker(text);
 
   if (marker) {
@@ -42,6 +62,11 @@ export function inferAutopilotDirective(text: string): AutopilotDirective {
   }
 
   const source = text.trim();
+  const blockedPatternRe = configRegex(config.directiveRules?.blockedPatterns);
+  const highImpactPatternRe = configRegex(config.directiveRules?.highImpactPatterns);
+  const blockedHint = BLOCKED_HINT_RE.test(source) || blockedPatternRe?.test(source) === true;
+  const highImpactHint = HIGH_IMPACT_RE.test(source) || highImpactPatternRe?.test(source) === true;
+
   if (!source) {
     return {
       status: "blocked",
@@ -49,7 +74,27 @@ export function inferAutopilotDirective(text: string): AutopilotDirective {
     };
   }
 
-  if (BLOCKED_HINT_RE.test(source)) {
+  if (
+    source.length < 300 &&
+    !blockedHint &&
+    ROUTINE_CONFIRMATION_RE.test(source) &&
+    OBVIOUS_NEXT_STEP_RE.test(source) &&
+    !highImpactHint
+  ) {
+    return {
+      status: "continue",
+      reason: "Assistant asked for routine confirmation; continuing with the obvious next step.",
+    };
+  }
+
+  if (ROUTINE_CONFIRMATION_RE.test(source) && highImpactHint) {
+    return {
+      status: "blocked",
+      reason: "Assistant requested input for a high-impact decision.",
+    };
+  }
+
+  if (blockedHint) {
     return {
       status: "blocked",
       reason: "Assistant requested input or reported it could not continue.",

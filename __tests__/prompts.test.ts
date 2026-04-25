@@ -59,6 +59,37 @@ describe("inferAutopilotDirective", () => {
     });
   });
 
+  test("continues through routine confirmation questions", () => {
+    expect(
+      inferAutopilotDirective(
+        "The next obvious thing is to run the tests. Do you want me to do it?",
+      ),
+    ).toEqual({
+      status: "continue",
+      reason: "Assistant asked for routine confirmation; continuing with the obvious next step.",
+    });
+  });
+
+  test("does not continue through routine-looking questions with explicit blockers", () => {
+    expect(
+      inferAutopilotDirective("I need more information before I proceed. Should I ask you now?"),
+    ).toEqual({
+      status: "blocked",
+      reason: "Assistant requested input or reported it could not continue.",
+    });
+  });
+
+  test("does not continue through high-impact confirmation questions", () => {
+    expect(
+      inferAutopilotDirective(
+        "The next step is to apply the production schema migration. Should I proceed?",
+      ),
+    ).toEqual({
+      status: "blocked",
+      reason: "Assistant requested input for a high-impact decision.",
+    });
+  });
+
   test("falls back to continue when the response is otherwise usable", () => {
     expect(
       inferAutopilotDirective("I updated the docs and will tackle the remaining files next."),

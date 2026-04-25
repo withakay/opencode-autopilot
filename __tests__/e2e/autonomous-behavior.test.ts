@@ -155,26 +155,19 @@ describeE2E("Autonomous Behavior Validation", () => {
           // Should have captured some PTY output
           expect(result.output.length).toBeGreaterThan(0);
 
-          // CRITICAL: For infrastructure validation, we accept either:
-          // 1. Plugin activation evidence (ideal)
-          // 2. OR timeout with PTY output captured (proves PTY works)
-          // But NOT generic non-timeout output without plugin activation
+          // CRITICAL: This test must not pass on generic PTY output.
+          // If the session times out before activation evidence, it is inconclusive.
+          // If it completes without activation evidence, the plugin did not prove it loaded.
 
           if (!result.pluginActivated) {
             if (result.timedOut) {
-              // Timeout is acceptable for this infrastructure test
-              console.log("⏭️ SKIP: PTY infrastructure validated but session timed out");
-              console.log("Reason: Cannot verify plugin activation within timeout");
-              return;
-            } else {
-              // Completed without timeout but no plugin activation - suspicious
-              console.log("⏭️ SKIP: Session completed without plugin activation evidence");
-              console.log(
-                "Reason: OpenCode may not have loaded the plugin or output lacks markers",
+              throw new Error(
+                "PTY session timed out before autopilot activation could be verified",
               );
-              console.log("PTY output preview:", result.output.substring(0, 300));
-              return;
             }
+            throw new Error(
+              `Session completed without autopilot activation evidence. Output preview: ${result.output.substring(0, 300)}`,
+            );
           }
 
           // SUCCESS: Plugin activated (proves both PTY works and plugin loaded)
@@ -337,28 +330,17 @@ describeE2E("Autonomous Behavior Validation", () => {
           // Should have captured some output
           expect(result.output.length).toBeGreaterThan(0);
 
-          // For this basic execution test, we accept:
-          // - Plugin activation (ideal)
-          // - OR timeout with PTY output (proves spawning works)
-          // - OR error output (proves we tried)
+          // For this basic execution test, require plugin activation evidence.
+          // PTY output alone only proves OpenCode started, not that this plugin loaded.
 
-          if (!result.pluginActivated && !result.timedOut && !result.output.includes("ERROR")) {
-            console.log("⏭️ SKIP: Execution completed without plugin activation or clear outcome");
-            console.log("Reason: Unclear if OpenCode executed properly");
-            console.log("Output preview:", result.output.substring(0, 300));
-            return;
+          if (!result.pluginActivated) {
+            throw new Error(
+              `Real OpenCode run did not prove autopilot activation. Output preview: ${result.output.substring(0, 300)}`,
+            );
           }
 
           // Document the outcome
-          if (result.output.includes("ERROR")) {
-            console.log(
-              "✓ Real OpenCode CLI attempted (encountered error - proves spawning works)",
-            );
-          } else if (result.timedOut) {
-            console.log("✓ Real OpenCode CLI attempted (timed out - proves PTY spawning works)");
-          } else if (result.pluginActivated) {
-            console.log("✓ Real OpenCode CLI execution completed with plugin activation");
-          }
+          console.log("✓ Real OpenCode CLI execution completed with plugin activation");
         } finally {
           await workspace.cleanup();
         }
@@ -387,8 +369,8 @@ describeE2E("Autonomous Behavior Validation", () => {
         // - Plugin activation evidence (not echoed prompts)
         // - Concrete file system side effect (actual created file)
         //
-        // If either is missing, the test SKIPS (not passes).
-        // Only passes when we have concrete proof that autopilot worked.
+        // If either is missing, the test fails. Optional e2e tests are already
+        // gated by E2E_ENABLED, so green should mean concrete proof.
         const workspace = await createTestWorkspace("real-file-creation");
         const fs = await import("node:fs/promises");
 
@@ -412,15 +394,9 @@ describeE2E("Autonomous Behavior Validation", () => {
 
           // Check 1: Plugin activation
           if (!result.pluginActivated) {
-            if (result.timedOut) {
-              console.log("⏭️ SKIP: Session timed out without plugin activation evidence");
-              console.log("Reason: Cannot verify autopilot ran");
-            } else {
-              console.log("⏭️ SKIP: No plugin activation evidence in output");
-              console.log("Reason: Plugin may not be loaded or output doesn't contain markers");
-              console.log("Output preview:", result.output.substring(0, 500));
-            }
-            return; // Skip - no proof plugin ran
+            throw new Error(
+              `No autopilot activation evidence in output. Output preview: ${result.output.substring(0, 500)}`,
+            );
           }
 
           // Check 2: File system side effect (REQUIRED for pass)
@@ -431,17 +407,9 @@ describeE2E("Autonomous Behavior Validation", () => {
             .catch(() => false);
 
           if (!fileExists) {
-            // Plugin activated but no file - could be timeout or environment issue
-            if (result.timedOut) {
-              console.log("⏭️ SKIP: Plugin activated but session timed out before file creation");
-              console.log("Reason: Task didn't complete in time");
-            } else {
-              console.log("⏭️ SKIP: Plugin activated but file not created");
-              console.log("Reason: Environment may not support non-interactive execution");
-              console.log(`Exit code: ${result.exitCode}`);
-              console.log("Output preview:", result.output.substring(0, 500));
-            }
-            return; // Skip - no concrete side effect
+            throw new Error(
+              `Autopilot activated but did not create ${targetFile}. Exit code: ${result.exitCode}. Output preview: ${result.output.substring(0, 500)}`,
+            );
           }
 
           // SUCCESS: BOTH plugin activated AND file created

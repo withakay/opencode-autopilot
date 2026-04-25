@@ -1,9 +1,1 @@
-export type AgentPhase =
-  | "OBSERVE"
-  | "ORIENT"
-  | "DECIDE"
-  | "EXECUTE"
-  | "EVALUATE"
-  | "RECOVER"
-  | "BLOCKED"
-  | "STOPPED";
+export type AgentPhase = "OBSERVE" | "STOPPED";

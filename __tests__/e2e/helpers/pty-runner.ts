@@ -478,11 +478,10 @@ function verifyPluginActivation(output: string): boolean {
 
   const strongMarkers = [
     // These patterns are very unlikely to appear in echoed user input
-    /autopilot.*(?:activated|initialized|configured)/i, // Plugin-specific state verbs
+    /Autopilot enabled in (?:limited|allow-all) mode with /, // Delegated task tool output
+    /Autopilot is enabled in (?:limited|allow-all) mode for this session/, // Session-default tool output
     /plugin.*autopilot.*loaded/i, // Explicit plugin loading message
     /autonomous mode.*(?:enabled|active)/i, // Specific state change
-    // Look for tool invocations or other concrete plugin actions
-    /\[Tool:.*mcp_/i, // MCP tool invocation (plugin is working)
   ];
 
   // Check for strong markers first (definitive evidence)

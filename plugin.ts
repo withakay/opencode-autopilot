@@ -1,8 +1,10 @@
 import type { Plugin } from "@opencode-ai/plugin";
+import { loadAutopilotConfig, summarizeWorkflow } from "./config/autopilot-config.ts";
 import { createChatMessageHook } from "./hooks/chat-message.ts";
 import type { SessionTracking } from "./hooks/event-handler.ts";
 import { createEventHandler, createSessionTracking } from "./hooks/event-handler.ts";
 import { createPermissionHook } from "./hooks/permission.ts";
+import { createSessionCompactingHook } from "./hooks/session-compacting.ts";
 import { createSystemTransformHook } from "./hooks/system-transform.ts";
 import { createToolAfterHook } from "./hooks/tool-after.ts";
 import {
@@ -17,7 +19,7 @@ import {
 import { createSessionState } from "./state/factory.ts";
 import { SessionCache } from "./state/session-cache.ts";
 import { createAutopilotTool } from "./tools/autopilot.ts";
-import type { ExtendedState } from "./types/index.ts";
+import type { ExtendedState, StopReason } from "./types/index.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -31,12 +33,14 @@ const MAX_HISTORY_ENTRIES = 10;
 // ---------------------------------------------------------------------------
 
 export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) => {
+  const config = await loadAutopilotConfig(directory);
+
   // -- Shared state stores (per-session) --
   const stateBySession = new Map<string, ExtendedState>();
   const trackingBySession = new Map<string, SessionTracking>();
-  const suppressCountBySession = new Map<string, number>();
   const historyBySession = new Map<string, string[]>();
   const permissionModeBySession = new Map<string, "allow-all" | "limited">();
+  const pendingAgentBySession = new Map<string, string | undefined>();
   const sessionCache = new SessionCache();
 
   // -- State accessors --
@@ -49,9 +53,9 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
   const deleteState = (sessionID: string): void => {
     stateBySession.delete(sessionID);
     trackingBySession.delete(sessionID);
-    suppressCountBySession.delete(sessionID);
     historyBySession.delete(sessionID);
     permissionModeBySession.delete(sessionID);
+    pendingAgentBySession.delete(sessionID);
   };
 
   const getTracking = (sessionID: string): SessionTracking | undefined =>
@@ -59,7 +63,6 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
 
   const initSession = (sessionID: string): void => {
     trackingBySession.set(sessionID, createSessionTracking());
-    suppressCountBySession.set(sessionID, 0);
     historyBySession.set(sessionID, []);
   };
 
@@ -101,13 +104,14 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
     reason: string,
     detail: string | undefined,
     variant: "info" | "success" | "warning" | "error" = "info",
+    stopReason: StopReason = "USER_STOP",
   ): Promise<void> => {
     const state = getState(sessionID);
     if (!state) return;
 
     state.mode = "DISABLED";
     state.phase = "STOPPED";
-    state.stop_reason = "USER_STOP";
+    state.stop_reason = stopReason;
     recordHistory(sessionID, detail ? `${reason}: ${detail}` : reason);
 
     await safeToast({
@@ -175,6 +179,7 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
         "Blocked by permissions",
         tracking.permissionBlockMessage ?? "A required action was denied in limited mode.",
         "warning",
+        "PERMISSION_DENIED",
       );
       return;
     }
@@ -187,15 +192,21 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
     tracking.lastAssistantMessageID = undefined;
 
     const assistantText = sessionCache.getMessageText(sessionID, messageID);
-    const directive = inferAutopilotDirective(assistantText);
+    const directive = inferAutopilotDirective(assistantText, config);
 
     if (directive.status === "complete") {
-      await setStopped(sessionID, "Task completed", directive.reason, "success");
+      await setStopped(sessionID, "Task completed", directive.reason, "success", "COMPLETED");
       return;
     }
 
     if (directive.status === "blocked") {
-      await setStopped(sessionID, "Task blocked", directive.reason, "warning");
+      await setStopped(
+        sessionID,
+        "Task blocked",
+        directive.reason,
+        "warning",
+        "WAITING_FOR_USER_INPUT",
+      );
       return;
     }
 
@@ -215,6 +226,7 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
           maxContinues: state.max_continues,
           task: state.goal,
           isValidation: true,
+          config,
         }),
       );
       return;
@@ -227,6 +239,7 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
         "Continuation limit reached",
         `Stopped after ${state.continuation_count} autonomous continuations.`,
         "warning",
+        "RETRY_EXHAUSTED",
       );
       return;
     }
@@ -255,6 +268,7 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
         continueCount: state.continuation_count,
         maxContinues: state.max_continues,
         task: state.goal,
+        config,
       }),
     );
   };
@@ -271,7 +285,13 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
       const isAbort = error?.name === "MessageAbortedError";
       const reason = isAbort ? "Interrupted" : "Error";
       const variant: "warning" | "error" = isAbort ? "warning" : "error";
-      await setStopped(sessionID, reason, errorMessage, variant);
+      await setStopped(
+        sessionID,
+        reason,
+        errorMessage,
+        variant,
+        isAbort ? "USER_STOP" : "UNRECOVERABLE_ERROR",
+      );
     },
   });
 
@@ -292,22 +312,27 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
 
   const systemTransformHook = createSystemTransformHook({
     getState,
-    getSuppressCount: (sessionID) => suppressCountBySession.get(sessionID) ?? 0,
-    decrementSuppressCount: (sessionID) => {
-      const current = suppressCountBySession.get(sessionID) ?? 0;
-      if (current > 0) {
-        suppressCountBySession.set(sessionID, current - 1);
-      }
+    consumePendingAgent: (sessionID) => {
+      const agent = pendingAgentBySession.get(sessionID);
+      pendingAgentBySession.delete(sessionID);
+      return agent;
     },
+    getConfig: () => config,
     buildSystemPrompt: buildAutopilotSystemPrompt,
   });
 
   const chatMessageHook = createChatMessageHook({
     getState,
-    incrementSuppressCount: (sessionID) => {
-      const current = suppressCountBySession.get(sessionID) ?? 0;
-      suppressCountBySession.set(sessionID, current + 1);
+    setPendingAgent: (sessionID, agent) => {
+      pendingAgentBySession.set(sessionID, agent);
     },
+  });
+
+  const sessionCompactingHook = createSessionCompactingHook({
+    getState,
+    getHistory: (sessionID) => historyBySession.get(sessionID) ?? [],
+    getConfig: () => config,
+    summarizeWorkflow,
   });
 
   const toolAfterHook = createToolAfterHook({
@@ -334,13 +359,8 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
     getHistory: (sessionID) => historyBySession.get(sessionID) ?? [],
     onStop: stopSession,
     defaultWorkerAgent: AUTOPILOT_FALLBACK_AGENT,
-    onArmed: async (sessionID, state) => {
-      const pm = (state as unknown as Record<string, unknown>).permissionMode;
-      if (pm === "allow-all" || pm === "limited") {
-        permissionModeBySession.set(sessionID, pm);
-      } else {
-        permissionModeBySession.set(sessionID, "limited");
-      }
+    onArmed: async (sessionID, state, permissionMode) => {
+      permissionModeBySession.set(sessionID, permissionMode);
 
       if (state.session_mode === "delegated-task") {
         recordHistory(
@@ -375,6 +395,8 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
     "experimental.chat.system.transform": systemTransformHook,
 
     "chat.message": chatMessageHook,
+
+    "experimental.session.compacting": sessionCompactingHook,
 
     "tool.execute.after": toolAfterHook,
   };

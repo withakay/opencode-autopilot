@@ -98,6 +98,73 @@ Examples:
 
 Autopilot no longer requires a dedicated control agent, but delegated work still runs through a configured agent (`general` by default). You can think of that agent as the orchestrator or overwatch worker that keeps a long-running task moving after `/autopilot <task>`.
 
+### Optional repo config
+
+Autopilot can read optional repo-local configuration from:
+
+- `.autopilot/config.jsonc`
+- `.autopilot/config.json`
+
+If both exist, `config.jsonc` wins. If neither exists, autopilot uses its built-in behavior.
+
+This config is intentionally lightweight and prompt-oriented. It lets you add workflow/spec hints without creating a hard dependency on any specific spec framework.
+
+Example:
+
+```jsonc
+{
+  "promptInjection": {
+    "system": [
+      "Follow the active spec workflow if present.",
+      "Do the next checklist item instead of asking for routine confirmation."
+    ],
+    "continuation": [
+      "Keep working through the current spec checklist."
+    ],
+    "validation": [
+      "Before marking complete, validate against the acceptance criteria."
+    ],
+    "compaction": [
+      "Preserve current workflow phase, acceptance criteria, and next actions."
+    ]
+  },
+  "directiveRules": {
+    "blockedPatterns": [
+      "missing acceptance criteria",
+      "waiting for spec clarification"
+    ],
+    "highImpactPatterns": [
+      "schema migration",
+      "breaking API change"
+    ]
+  },
+  "workflow": {
+    "name": "SpecFlow",
+    "phase": "implement",
+    "goal": "Finish the current spec increment",
+    "doneCriteria": [
+      "implementation complete",
+      "tests pass"
+    ],
+    "nextActions": [
+      "implement code",
+      "run tests",
+      "validate against acceptance criteria"
+    ]
+  }
+}
+```
+
+What it does:
+
+- `promptInjection.system` appends repo-specific workflow hints to the autopilot system prompt
+- `promptInjection.continuation` appends hints to each continuation prompt
+- `promptInjection.validation` appends hints to validation checkpoints
+- `promptInjection.compaction` appends hints to the compaction context
+- `directiveRules.blockedPatterns` extends blocker detection for responses without explicit autopilot markers
+- `directiveRules.highImpactPatterns` extends high-impact detection so autopilot stops instead of auto-continuing
+- `workflow` adds structured workflow/spec reminders to compaction context
+
 ### Autonomous Strength Modes
 
 Control how strongly autopilot biases toward autonomous decision-making:
@@ -125,34 +192,27 @@ The autonomous strength parameter controls how strongly this guidance is worded.
 
 ## Architecture
 
-The plugin implements a session-scoped autonomy layer plus a delegated-task continuation loop with a formal state machine.
+The plugin is intentionally small: it uses OpenCode hooks to add session-scoped autonomy guidance, intercept permissions, preserve autopilot state during compaction, and drive an optional delegated-task continuation loop.
 
-### State Machine Phases
+### Runtime integration points
 
-| Phase | Description |
-|-------|-------------|
-| `OBSERVE` | Ingest new evidence (user input, tool output, approvals, etc.) |
-| `ORIENT` | Reconcile observations against goal; detect completion or blockers |
-| `DECIDE` | Select exactly one next foreground action |
-| `EXECUTE` | Dispatch the selected action |
-| `EVALUATE` | Classify result as progress, non-progress, or failure |
-| `RECOVER` | Attempt bounded recovery (re-plan, alternate tool, etc.) |
-| `BLOCKED` | Waiting for external input (approval, trust, user input) |
-| `STOPPED` | Terminal state (completed, user stop, error, etc.) |
+| Hook / surface | Purpose |
+|----------------|---------|
+| `tool.autopilot` | Enables/disables autopilot, reports status, or starts a delegated task |
+| `permission.ask` | Applies `limited` or `allow-all` permission policy while autopilot is enabled |
+| `experimental.chat.system.transform` | Injects autonomy guidance; delegated worker turns also receive status-marker instructions |
+| `chat.message` | Tracks the pending agent so delegated status markers are scoped to the configured worker |
+| `experimental.session.compacting` | Preserves autopilot goal, worker, continuation count, and recent events across compaction |
+| `event` | Watches message/session events and continues delegated tasks on `session.idle` |
+| `tool.execute.after` | Removes internal autopilot markers from autopilot tool output |
 
-### Safety Invariants (S1-S9)
+The continuation loop relies on explicit assistant status markers for delegated work:
 
-| ID | Property | Enforcement |
-|----|----------|-------------|
-| S1 | No unauthorized side effects | Admissibility guard on all effects |
-| S2 | Approval cannot be bypassed | `approvalRequired()` check in DECIDE |
-| S3 | Trust cannot be bypassed | `trustRequired()` check in DECIDE |
-| S4 | BLOCKED/STOPPED are explicit | `block()` and `stop()` require a reason |
-| S5 | No silent denial loss | Denials preserved as observations in state |
-| S6 | No uncontrolled livelock | Non-progress counter with enforced limit |
-| S7 | STOPPED is quiescent | No effects without resume |
-| S8 | Interrupt preemption | INTERRUPT → STOPPED immediately |
-| S9 | State preserved across risky effects | PERSIST_SNAPSHOT before risky dispatch |
+```xml
+<autopilot status="continue|validate|complete|blocked">short reason</autopilot>
+```
+
+If a worker asks a routine confirmation question like "Do you want me to run the tests?", the plugin treats that as `continue` and sends the next continuation prompt. High-impact or genuinely blocked questions still stop for user input.
 
 ## Development
 
@@ -177,32 +237,20 @@ src/
   index.ts                      # Entry point — exports AutopilotPlugin
   plugin.ts                     # Plugin function (OpenCode hook wiring)
   types/                        # Type definitions
-    index.ts, mode.ts, phase.ts, stop-reason.ts,
-    event.ts, effect.ts, state.ts, reducer.ts
+    index.ts, mode.ts, phase.ts, stop-reason.ts, state.ts
   state/                        # State factory, session cache
     index.ts, factory.ts, session-cache.ts
-  reducer/                      # Pure reducer functions
-    index.ts, reduce.ts, integrate.ts, observe.ts,
-    orient.ts, decide.ts, evaluate.ts, recover.ts,
-    guards.ts, transitions.ts
-  events/                       # Event validation, factory, Zod schemas
-    index.ts, validate.ts, factory.ts, schemas.ts
-  effects/                      # Effect dispatcher, snapshot persistence
-    index.ts, dispatcher.ts, snapshot.ts
-  loop/                         # Control loop driver
-    index.ts, control-loop.ts
   prompts/                      # System prompt, continuation, directives
     index.ts, system-prompt.ts, continuation.ts,
     directives.ts, normalize.ts, format.ts
   hooks/                        # OpenCode hook handlers
     index.ts, event-handler.ts, permission.ts,
-    system-transform.ts, chat-message.ts, tool-after.ts
+    system-transform.ts, session-compacting.ts,
+    chat-message.ts, tool-after.ts
   tools/                        # Tool definitions
     index.ts, autopilot.ts, usage.ts
   __tests__/                    # All test files
-    helpers.ts, reducer.test.ts, events.test.ts,
-    effects.test.ts, prompts.test.ts, plugin.test.ts,
-    safety.test.ts
+    prompts.test.ts, plugin.test.ts, autopilot-tool.test.ts
 ```
 
 ## License

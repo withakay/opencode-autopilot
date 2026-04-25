@@ -69,10 +69,5 @@ export function summarizeAutopilotState(state: ExtendedState | null | undefined)
     status.push(`stop=${state.stop_reason}`);
   }
 
-  const latestEvent = state.latest_observations.events.at(-1);
-  if (latestEvent) {
-    status.push(`last_event=${latestEvent.event_type}`);
-  }
-
   return `Autopilot status: ${status.join(", ")}`;
 }

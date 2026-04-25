@@ -1,7 +1,18 @@
+import type { AutopilotConfig } from "../config/autopilot-config.ts";
 import type { AutonomousStrength } from "../types/state.ts";
 
-export function buildAutopilotSystemPrompt(strength: AutonomousStrength = "balanced"): string {
-  const baseInstructions = ["Autopilot mode is active for this session."];
+export function buildAutopilotSystemPrompt(
+  strength: AutonomousStrength = "balanced",
+  includeStatusMarkers = true,
+  config: AutopilotConfig = {},
+): string {
+  const baseInstructions = [
+    "Autopilot mode is active for this session.",
+    "Assume the user expects you to keep working until the task is complete, blocked by a real external constraint, or stopped explicitly.",
+    "Do not ask routine confirmation questions such as whether to run the next check, inspect the next file, apply the obvious fix, or continue with the next step. Do it.",
+    "If you are about to ask a question, first decide whether a safe default or next obvious action exists; when it does, take that action and mention the choice briefly.",
+    "Escalate only for irreversible or high-impact decisions, security or safety risks, denied permissions, missing required external information, or genuine blockers with no safe default.",
+  ];
 
   const behaviorInstructions: string[] = (() => {
     switch (strength) {
@@ -9,7 +20,7 @@ export function buildAutopilotSystemPrompt(strength: AutonomousStrength = "balan
         return [
           "Work autonomously toward the user's goal and ask fewer follow-up questions.",
           "Prefer the recommended or safest reasonable default when a routine choice is needed.",
-          "Only ask the user for input when you are truly blocked, the choice is high-impact, or no safe default exists.",
+          "Only ask the user for input when you are truly blocked, the choice is high-impact, or no safe default exists after inspecting the available context.",
         ];
 
       case "balanced":
@@ -17,6 +28,7 @@ export function buildAutopilotSystemPrompt(strength: AutonomousStrength = "balan
           "Work autonomously toward the user's goal with minimal user interaction.",
           "When faced with routine choices (file paths, variable names, standard configurations), select the recommended or safest default without asking.",
           "Only escalate to the user for: (1) high-impact decisions, (2) security/safety risks, or (3) when truly blocked with no reasonable default.",
+          "Never end a turn with a proposal to do the next obvious step; execute that step instead.",
         ];
 
       case "aggressive":
@@ -26,6 +38,7 @@ export function buildAutopilotSystemPrompt(strength: AutonomousStrength = "balan
           "For choices with a 'recommended' option clearly marked, select it automatically and explain your choice in the response.",
           "Only escalate to the user for: (1) high-impact irreversible decisions (data deletion, major refactors), (2) explicit user preference required (UX/design choices affecting end users), or (3) security/safety risks.",
           "If you can make reasonable progress on a task without user input, do so immediately.",
+          "Treat asking for permission to do routine follow-up work as a failure of autonomy.",
         ];
     }
   })();
@@ -41,5 +54,12 @@ export function buildAutopilotSystemPrompt(strength: AutonomousStrength = "balan
     "Do not omit the marker.",
   ];
 
-  return [...baseInstructions, ...behaviorInstructions, ...statusMarkerInstructions].join("\n");
+  const markerInstructions = includeStatusMarkers ? statusMarkerInstructions : [];
+  const configInstructions = config.promptInjection?.system ?? [];
+  return [
+    ...baseInstructions,
+    ...behaviorInstructions,
+    ...configInstructions,
+    ...markerInstructions,
+  ].join("\n");
 }

@@ -1,6 +1,6 @@
 {
   "name": "@withakay/opencode-autopilot",
-  "version": "0.3.3",
+  "version": "0.4.0",
   "description": "Autopilot mode plugin for OpenCode - autonomous multi-step task continuation",
   "type": "module",
   "main": "./dist/index.js",

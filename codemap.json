@@ -1,0 +1,275 @@
+{
+  "metadata": {
+    "version": "3.0.0",
+    "last_run": "2026-05-14T10:13:29.526Z",
+    "root": "/Users/jack/Code/withakay/opencode-autopilot",
+    "include_patterns": [
+      "*.ts",
+      "config/**/*.ts",
+      "hooks/**/*.ts",
+      "prompts/**/*.ts",
+      "state/**/*.ts",
+      "tools/**/*.ts",
+      "types/**/*.ts",
+      "__tests__/**/*.ts",
+      "package.json",
+      "README.md"
+    ],
+    "exclude_patterns": ["node_modules/**", "dist/**", ".git/**", ".autopilot/**", ".zoekt/**"],
+    "exceptions": []
+  },
+  "files": {
+    "README.md": {
+      "path": "README.md",
+      "size": 9829,
+      "mtimeMs": 1777150699429,
+      "hash": "22b3e463be489124b1548e3c242f3f1ac58afa06"
+    },
+    "__tests__/autopilot-tool.test.ts": {
+      "path": "__tests__/autopilot-tool.test.ts",
+      "size": 13732,
+      "mtimeMs": 1778747939134,
+      "hash": "12568f8c1924249256aecabe1ff2706d04887afa"
+    },
+    "__tests__/config.test.ts": {
+      "path": "__tests__/config.test.ts",
+      "size": 4711,
+      "mtimeMs": 1778696291054,
+      "hash": "91595685678a62453226bcc36500c335912a33df"
+    },
+    "__tests__/e2e/README.md": {
+      "path": "__tests__/e2e/README.md",
+      "size": 18456,
+      "mtimeMs": 1775630550322,
+      "hash": "e0601330ee59d38b9c177eef7fb49085c9c8645d"
+    },
+    "__tests__/e2e/autonomous-behavior.test.ts": {
+      "path": "__tests__/e2e/autonomous-behavior.test.ts",
+      "size": 20248,
+      "mtimeMs": 1777150699430,
+      "hash": "8fc221c8d087b264aba427079601e07a6e0e56dc"
+    },
+    "__tests__/e2e/helpers/fixtures.ts": {
+      "path": "__tests__/e2e/helpers/fixtures.ts",
+      "size": 4493,
+      "mtimeMs": 1775626240757,
+      "hash": "e51b22b3034af9e2ee37c90d49ae75cc2c139a47"
+    },
+    "__tests__/e2e/helpers/pty-runner.ts": {
+      "path": "__tests__/e2e/helpers/pty-runner.ts",
+      "size": 20171,
+      "mtimeMs": 1777150699430,
+      "hash": "d19f01a5802f015fc459ddda8853a65f9ace5d24"
+    },
+    "__tests__/plugin.test.ts": {
+      "path": "__tests__/plugin.test.ts",
+      "size": 31493,
+      "mtimeMs": 1778702973482,
+      "hash": "cf97e2aab701c5b0284f44f8ff0b434865533264"
+    },
+    "__tests__/prompts.test.ts": {
+      "path": "__tests__/prompts.test.ts",
+      "size": 6995,
+      "mtimeMs": 1778747952454,
+      "hash": "9222ffdadef4940088e789475b8ec7d57b1226dc"
+    },
+    "config/autopilot-config.ts": {
+      "path": "config/autopilot-config.ts",
+      "size": 4078,
+      "mtimeMs": 1777150699431,
+      "hash": "293e2985d9cefd05e0ee41420ca10ba5652d19d5"
+    },
+    "hooks/chat-message.ts": {
+      "path": "hooks/chat-message.ts",
+      "size": 864,
+      "mtimeMs": 1777150699431,
+      "hash": "9bad6dff86c2c02561f473a946ae8094811ef39f"
+    },
+    "hooks/event-handler.ts": {
+      "path": "hooks/event-handler.ts",
+      "size": 5616,
+      "mtimeMs": 1777150699432,
+      "hash": "50204aedb70165c42c3f031ce35bf2a63db84bd9"
+    },
+    "hooks/index.ts": {
+      "path": "hooks/index.ts",
+      "size": 798,
+      "mtimeMs": 1777150699432,
+      "hash": "53378f8178c646e9ebd8f1b59a7475504d048a2c"
+    },
+    "hooks/permission.ts": {
+      "path": "hooks/permission.ts",
+      "size": 1626,
+      "mtimeMs": 1774390281084,
+      "hash": "75b33330c2609a2071a8fa4a3bf1f278e99d301f"
+    },
+    "hooks/session-compacting.ts": {
+      "path": "hooks/session-compacting.ts",
+      "size": 3553,
+      "mtimeMs": 1778697581989,
+      "hash": "b1eb6d121ea450b71732b6655b11949e258b6c45"
+    },
+    "hooks/system-transform.ts": {
+      "path": "hooks/system-transform.ts",
+      "size": 3138,
+      "mtimeMs": 1778697856988,
+      "hash": "d81061d738d4303d5895daf0a3909e41c5733177"
+    },
+    "hooks/tool-after.ts": {
+      "path": "hooks/tool-after.ts",
+      "size": 890,
+      "mtimeMs": 1775620788462,
+      "hash": "d56c246dc2193e408fe290df7a5622b02ae42aa2"
+    },
+    "index.ts": {
+      "path": "index.ts",
+      "size": 47,
+      "mtimeMs": 1774373268529,
+      "hash": "3f7f29ea2509ad61460ff8db3a7c7fe72d489bb9"
+    },
+    "package.json": {
+      "path": "package.json",
+      "size": 1770,
+      "mtimeMs": 1777150725950,
+      "hash": "6ff2bd6f5cce599439f8b15f6806b9ab16a1303a"
+    },
+    "plugin.ts": {
+      "path": "plugin.ts",
+      "size": 25981,
+      "mtimeMs": 1778747679769,
+      "hash": "2226af1a797991604bf86a6bc2109786d9e537b0"
+    },
+    "prompts/continuation.ts": {
+      "path": "prompts/continuation.ts",
+      "size": 6823,
+      "mtimeMs": 1778747974107,
+      "hash": "ecd169731ada9c73f7c61d190c5532c3f5c79657"
+    },
+    "prompts/directives.ts": {
+      "path": "prompts/directives.ts",
+      "size": 3972,
+      "mtimeMs": 1778697178381,
+      "hash": "aaf4649bd8ba5d4ed3e4c913f7ed959d3da7562e"
+    },
+    "prompts/format.ts": {
+      "path": "prompts/format.ts",
+      "size": 2356,
+      "mtimeMs": 1778697339434,
+      "hash": "990b08e2dc7c252584db4dd086b72bff7e7043e0"
+    },
+    "prompts/index.ts": {
+      "path": "prompts/index.ts",
+      "size": 730,
+      "mtimeMs": 1778697203198,
+      "hash": "85b309f8f22c21273f91f6a245dc11e475d2efca"
+    },
+    "prompts/normalize.ts": {
+      "path": "prompts/normalize.ts",
+      "size": 395,
+      "mtimeMs": 1774390281076,
+      "hash": "23fe91db5921bf5dd591e4948b8fa73446256779"
+    },
+    "prompts/system-prompt.ts": {
+      "path": "prompts/system-prompt.ts",
+      "size": 4794,
+      "mtimeMs": 1778747897994,
+      "hash": "c9e5166ad6267b7cd1450adaabb3013ef1a12997"
+    },
+    "state/factory.ts": {
+      "path": "state/factory.ts",
+      "size": 2415,
+      "mtimeMs": 1778747553964,
+      "hash": "de4de95527727bd09eff577f24371c85e88f86cc"
+    },
+    "state/index.ts": {
+      "path": "state/index.ts",
+      "size": 280,
+      "mtimeMs": 1777150699434,
+      "hash": "c8603010d81c45f8203dd37cbb5742bc493ec220"
+    },
+    "state/persistence.ts": {
+      "path": "state/persistence.ts",
+      "size": 2803,
+      "mtimeMs": 1778702883011,
+      "hash": "99ea9483508c5e0fee428662e290cfe2134530be"
+    },
+    "state/session-cache.ts": {
+      "path": "state/session-cache.ts",
+      "size": 2636,
+      "mtimeMs": 1774390281086,
+      "hash": "ae4962d21310249bf6e3a89b7a5dafdb5b126450"
+    },
+    "tools/autopilot.ts": {
+      "path": "tools/autopilot.ts",
+      "size": 10114,
+      "mtimeMs": 1778747974108,
+      "hash": "2349b90c9b654168f8f0505e014d0475aea5f6f6"
+    },
+    "tools/index.ts": {
+      "path": "tools/index.ts",
+      "size": 111,
+      "mtimeMs": 1775620788463,
+      "hash": "e2d34e90ec63a6fbb06aaf08ff6ede0debc47761"
+    },
+    "tools/plan.ts": {
+      "path": "tools/plan.ts",
+      "size": 2631,
+      "mtimeMs": 1778702021437,
+      "hash": "4aba4d8c203269f686fdc3a17812ddba2da25f0a"
+    },
+    "tools/planning.ts": {
+      "path": "tools/planning.ts",
+      "size": 2822,
+      "mtimeMs": 1778747974107,
+      "hash": "524871cad00aa4556246610753acc7bd4edc5014"
+    },
+    "tools/usage.ts": {
+      "path": "tools/usage.ts",
+      "size": 2573,
+      "mtimeMs": 1778747885401,
+      "hash": "887a59d2befc53202e0b0bc0acf03a25e7ec2c40"
+    },
+    "types/index.ts": {
+      "path": "types/index.ts",
+      "size": 288,
+      "mtimeMs": 1778697093800,
+      "hash": "d7adb21f307d43be69ca19a27b9f7f6110ec9a13"
+    },
+    "types/mode.ts": {
+      "path": "types/mode.ts",
+      "size": 48,
+      "mtimeMs": 1774373268536,
+      "hash": "935359425cd9370abb5db2cc03a3c38f497e28d5"
+    },
+    "types/phase.ts": {
+      "path": "types/phase.ts",
+      "size": 48,
+      "mtimeMs": 1777150699435,
+      "hash": "37caaec7255ef5fbabb0a9a851fcdac63437a701"
+    },
+    "types/state.ts": {
+      "path": "types/state.ts",
+      "size": 1300,
+      "mtimeMs": 1778747544278,
+      "hash": "01f7fb6fe9d86abec1c180bd38243c4aab82ec50"
+    },
+    "types/stop-reason.ts": {
+      "path": "types/stop-reason.ts",
+      "size": 159,
+      "mtimeMs": 1777150699435,
+      "hash": "acbf4cf774fc4c49d5325c901b3e6ccc5c157c48"
+    }
+  },
+  "folder_hashes": {
+    ".": "ce0350a7205893dde48379acfe09b6c3766b9f8a",
+    "__tests__": "50d289bd6e0c9cffdaf730932d829fd27f425958",
+    "__tests__/e2e": "d2c02edd0474fa6722bb714a81b78f20eaff1fed",
+    "__tests__/e2e/helpers": "3aa7167e4e2bf1abf201c4676caccb6c190a3b55",
+    "config": "947cf8a6f512d19ee0f0ec93308dc91bb044d3f2",
+    "hooks": "394c9be1b9cc4589ad22a0bcddb2d16fb8ee36c1",
+    "prompts": "063f07602c7f58d30d1f6ae79137a84ea648e1c9",
+    "state": "cdb76f64f10d0b5ea1a2cccff0adea828d2dfcaf",
+    "tools": "00b78a5c0f61f0043812bd4517d448886beaf006",
+    "types": "a9725fd074b9fbffe172dfac3aa566bb3eb6ff40"
+  }
+}

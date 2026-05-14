@@ -24,3 +24,5 @@ coverage/
 # Local env
 .env
 .env.local
+.zoekt/
+.autopilot/state.json

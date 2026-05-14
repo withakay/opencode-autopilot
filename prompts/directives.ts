@@ -1,6 +1,11 @@
 import type { AutopilotConfig } from "../config/autopilot-config.ts";
 
-export type AutopilotDirectiveStatus = "continue" | "validate" | "complete" | "blocked";
+export type AutopilotDirectiveStatus =
+  | "continue"
+  | "step-done"
+  | "validate"
+  | "complete"
+  | "blocked";
 
 export interface AutopilotDirective {
   status: AutopilotDirectiveStatus;
@@ -8,7 +13,7 @@ export interface AutopilotDirective {
 }
 
 const AUTOPILOT_MARKER_RE =
-  /\n?<autopilot\s+status="(continue|validate|complete|blocked)">([\s\S]*?)<\/autopilot>\s*$/i;
+  /\n?<autopilot\s+status="(continue|step-done|validate|complete|blocked)">([\s\S]*?)<\/autopilot>\s*$/i;
 const BLOCKED_HINT_RE =
   /(need (more|additional) information|cannot continue|can't continue|blocked|waiting for user|please provide|which option|what should i|what would you like)/i;
 const ROUTINE_CONFIRMATION_RE =
@@ -109,15 +114,19 @@ export function inferAutopilotDirective(
 
 function defaultReason(status: AutopilotDirectiveStatus): string {
   if (status === "complete") {
-    return "Task complete.";
+    return "Objective complete.";
+  }
+
+  if (status === "step-done") {
+    return "Plan step complete.";
   }
 
   if (status === "blocked") {
-    return "Task is blocked.";
+    return "Objective is blocked.";
   }
 
   if (status === "validate") {
-    return "Task needs validation before marking complete.";
+    return "Objective needs validation before marking complete.";
   }
 
   return "More work remains.";

@@ -1,5 +1,7 @@
 import { tool } from "@opencode-ai/plugin";
-import type { AutonomousStrength, ExtendedState } from "../types/index.ts";
+import type { AutonomousStrength, ExtendedState, PlanStep } from "../types/index.ts";
+import { parsePlan } from "./plan.ts";
+import { inferPlanningContext } from "./planning.ts";
 import { buildAutopilotUsage } from "./usage.ts";
 
 export interface AutopilotToolDeps {
@@ -7,12 +9,17 @@ export interface AutopilotToolDeps {
   setState: (sessionID: string, state: ExtendedState) => void;
   createSessionState: (
     sessionID: string,
-    goal: string,
+    objective: string,
     options: {
       maxContinues?: number;
       sessionMode?: ExtendedState["session_mode"];
       workerAgent?: string;
       autonomousStrength?: AutonomousStrength;
+      doneWhen?: string;
+      verifyWith?: string;
+      planSource?: string;
+      planningFramework?: string;
+      plan?: PlanStep[];
     },
   ) => ExtendedState;
   normalizeMaxContinues: (value: unknown) => number;
@@ -22,6 +29,12 @@ export interface AutopilotToolDeps {
     state: ExtendedState,
     permissionMode: "allow-all" | "limited",
   ) => Promise<void>;
+  onResumed?: (
+    sessionID: string,
+    state: ExtendedState,
+    permissionMode: "allow-all" | "limited" | undefined,
+  ) => Promise<void>;
+  onStateChanged?: (sessionID: string, state: ExtendedState) => Promise<void>;
   summarizeState: (state: ExtendedState | null | undefined) => string;
   getHistory: (sessionID: string) => string[];
   onStop: (sessionID: string, reason: string | undefined) => void;
@@ -33,16 +46,36 @@ const AUTOPILOT_FALLBACK_AGENT = "pi";
 export function createAutopilotTool(deps: AutopilotToolDeps) {
   return tool({
     description:
-      "Control session autopilot: turn it on or off, check status, or start a long-running delegated task",
+      "Control session autopilot: enable ambient autonomy or start a durable objective run",
     args: {
       action: tool.schema
-        .enum(["on", "off", "status", "help"])
+        .enum(["on", "off", "stop", "status", "help", "start", "run", "pause", "resume", "clear"])
         .optional()
-        .describe("Autopilot command: on, off, status, or help"),
+        .describe(
+          "Autopilot command: start/run, on, off/stop, pause, resume, clear, status, or help",
+        ),
       task: tool.schema
         .string()
         .optional()
-        .describe("Optional delegated task to hand to the configured agent"),
+        .describe("Deprecated alias for objective; starts a durable objective run when provided"),
+      objective: tool.schema
+        .string()
+        .optional()
+        .describe("Durable objective to keep working toward until complete or blocked"),
+      goal: tool.schema.string().optional().describe("Alias for objective"),
+      target: tool.schema.string().optional().describe("Alias for objective"),
+      doneWhen: tool.schema
+        .string()
+        .optional()
+        .describe("Verifiable stopping condition for the objective run"),
+      verifyWith: tool.schema
+        .string()
+        .optional()
+        .describe("Command or artifact that proves the objective is complete"),
+      plan: tool.schema
+        .string()
+        .optional()
+        .describe("Optional newline or JSON-array plan to execute step by step"),
       permissionMode: tool.schema
         .enum(["limited", "allow-all"])
         .optional()
@@ -56,7 +89,7 @@ export function createAutopilotTool(deps: AutopilotToolDeps) {
       workerAgent: tool.schema
         .string()
         .optional()
-        .describe("Delegate agent used for long-running autopilot tasks"),
+        .describe("Delegate agent used for long-running autopilot objective runs"),
       autonomousStrength: tool.schema
         .enum(["conservative", "balanced", "aggressive"])
         .optional()
@@ -65,10 +98,15 @@ export function createAutopilotTool(deps: AutopilotToolDeps) {
         ),
     },
     async execute(args, context) {
-      const task = args.task?.trim() ?? "";
-      const action = args.action ?? (task ? "on" : "help");
+      const objective =
+        args.objective?.trim() ||
+        args.goal?.trim() ||
+        args.target?.trim() ||
+        args.task?.trim() ||
+        "";
+      const action = args.action ?? (objective ? "start" : "help");
 
-      if (action === "help" || (!args.action && task.toLowerCase() === "help")) {
+      if (action === "help" || (!args.action && objective.toLowerCase() === "help")) {
         return buildAutopilotUsage();
       }
 
@@ -83,14 +121,66 @@ export function createAutopilotTool(deps: AutopilotToolDeps) {
         return `${deps.summarizeState(state)}${historyStr}`;
       }
 
-      if (action === "off") {
+      if (action === "off" || action === "stop") {
         const state = deps.getState(context.sessionID);
         if (!state || state.mode !== "ENABLED") {
           return "Autopilot is not running in this session.";
         }
 
-        deps.onStop(context.sessionID, task || undefined);
-        return task ? `Autopilot stopped: ${task}` : "Autopilot stopped for this session.";
+        const stoppedObjective = objective || state.objective;
+        deps.onStop(context.sessionID, stoppedObjective || undefined);
+        return stoppedObjective
+          ? `Autopilot stopped: ${stoppedObjective}`
+          : "Autopilot stopped for this session.";
+      }
+
+      if (action === "pause") {
+        const state = deps.getState(context.sessionID);
+        if (
+          !state ||
+          state.run_mode !== "objective" ||
+          !["active", "waiting_for_reply", "validating"].includes(state.status)
+        ) {
+          return "No active autopilot objective to pause.";
+        }
+
+        state.mode = "DISABLED";
+        state.phase = "STOPPED";
+        state.status = "paused";
+        await deps.onStateChanged?.(context.sessionID, state);
+        return `Autopilot paused: ${state.objective}`;
+      }
+
+      if (action === "resume") {
+        const state = deps.getState(context.sessionID);
+        if (
+          !state ||
+          state.run_mode !== "objective" ||
+          !["paused", "blocked"].includes(state.status)
+        ) {
+          return "No paused or blocked autopilot objective to resume.";
+        }
+
+        state.mode = "ENABLED";
+        state.phase = "OBSERVE";
+        state.status = "active";
+        state.stop_reason = null;
+        deps.initSession(context.sessionID);
+        await deps.onResumed?.(context.sessionID, state, args.permissionMode);
+        await deps.onStateChanged?.(context.sessionID, state);
+        return `Autopilot resumed: ${state.objective}`;
+      }
+
+      if (action === "clear") {
+        const state = deps.getState(context.sessionID);
+        if (!state || state.run_mode !== "objective") {
+          return "No autopilot objective to clear.";
+        }
+
+        deps.onStop(context.sessionID, state.objective || "cleared");
+        return state.objective
+          ? `Autopilot objective cleared: ${state.objective}`
+          : "Autopilot objective cleared.";
       }
 
       const permissionMode = args.permissionMode ?? "limited";
@@ -98,36 +188,76 @@ export function createAutopilotTool(deps: AutopilotToolDeps) {
       const workerAgent =
         args.workerAgent?.trim() || deps.defaultWorkerAgent || AUTOPILOT_FALLBACK_AGENT;
       const autonomousStrength = args.autonomousStrength ?? "balanced";
+      const startsObjectiveRun =
+        action === "start" || action === "run" || (!args.action && Boolean(objective));
+      const effectiveStrength: AutonomousStrength = startsObjectiveRun
+        ? "aggressive"
+        : autonomousStrength;
+      const plan = parsePlan(args.plan);
+      const planningContext = startsObjectiveRun
+        ? await inferPlanningContext({
+            root: context.directory || context.worktree,
+            objective,
+            planText: args.plan,
+          })
+        : {};
 
-      const state = deps.createSessionState(context.sessionID, task, {
-        maxContinues,
-        workerAgent,
-        autonomousStrength,
-        sessionMode: task ? "delegated-task" : "session-defaults",
-      });
+      if (startsObjectiveRun && !objective) {
+        return [
+          "Autopilot objective runs need a target.",
+          'Use: autopilot(action="start", objective="Complete <objective> without stopping until <verifiable end state>")',
+        ].join("\n");
+      }
+
+      const state = deps.createSessionState(
+        context.sessionID,
+        startsObjectiveRun ? objective : "",
+        {
+          maxContinues,
+          workerAgent,
+          autonomousStrength: effectiveStrength,
+          sessionMode: startsObjectiveRun ? "delegated-task" : "session-defaults",
+          doneWhen: args.doneWhen?.trim() || undefined,
+          verifyWith: args.verifyWith?.trim() || undefined,
+          planSource: planningContext.planSource,
+          planningFramework: planningContext.planningFramework,
+          plan,
+        },
+      );
 
       deps.setState(context.sessionID, state);
       deps.initSession(context.sessionID);
 
       context.metadata({
-        title: task ? "Autopilot task started" : "Autopilot enabled",
+        title: startsObjectiveRun ? "Autopilot objective started" : "Autopilot enabled",
         metadata: {
           action,
           permissionMode,
           maxContinues,
           workerAgent,
-          autonomousStrength,
-          task: task || null,
+          autonomousStrength: effectiveStrength,
+          objective: startsObjectiveRun ? objective : null,
+          // Deprecated telemetry alias for consumers that still expect task metadata.
+          task: startsObjectiveRun ? objective : null,
+          doneWhen: state.done_when ?? null,
+          verifyWith: state.verify_with ?? null,
+          planSource: state.plan_source ?? null,
+          planningFramework: state.planning_framework ?? null,
+          planSteps: state.plan.length,
         },
       });
 
       await deps.onArmed(context.sessionID, state, permissionMode);
 
       if (state.session_mode === "session-defaults") {
-        return `Autopilot is enabled in ${permissionMode} mode for this session. OpenCode will prefer reasonable defaults, ask fewer questions, and keep using ${workerAgent} for delegated work when you hand it a task.`;
+        return `Autopilot is enabled in ${permissionMode} mode for this session. OpenCode will prefer reasonable defaults, ask fewer questions, and keep using ${workerAgent} for delegated work when you hand it an objective.`;
       }
 
-      return `Autopilot enabled in ${permissionMode} mode with ${workerAgent}. It will start the delegated task after this response and may continue up to ${maxContinues} times.`;
+      const planSummary = state.plan.length > 0 ? ` Plan: ${state.plan.length} steps.` : "";
+      const contextSummary = state.planning_framework
+        ? ` Detected planning context: ${state.planning_framework}${state.plan_source ? ` (${state.plan_source})` : ""}.`
+        : "";
+      return `Autopilot objective run started in ${permissionMode} mode with ${workerAgent}. Objective: ${state.objective}.${planSummary}${contextSummary} It may continue up to ${maxContinues} times.`;
     },
   });
 }

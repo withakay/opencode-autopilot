@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { AutopilotConfig } from "../config/autopilot-config.ts";
 import { createChatMessageHook } from "../hooks/chat-message.ts";
 import type { SessionTracking } from "../hooks/event-handler.ts";
@@ -7,10 +10,20 @@ import { createPermissionHook } from "../hooks/permission.ts";
 import { createSessionCompactingHook } from "../hooks/session-compacting.ts";
 import { createSystemTransformHook } from "../hooks/system-transform.ts";
 import { createToolAfterHook } from "../hooks/tool-after.ts";
+import { AutopilotPlugin } from "../plugin.ts";
 import { buildAutopilotSystemPrompt, stripAutopilotMarker } from "../prompts/index.ts";
 import { createSessionState } from "../state/factory.ts";
 import { SessionCache } from "../state/session-cache.ts";
 import type { ExtendedState } from "../types/index.ts";
+
+async function withTempDir(run: (dir: string) => Promise<void>) {
+  const dir = await mkdtemp(join(tmpdir(), "autopilot-plugin-test-"));
+  try {
+    await run(dir);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Shared setup
@@ -282,6 +295,506 @@ describe("Plugin Integration — event handler", () => {
     // The state should indicate we're at the limit
     expect(state.continuation_count).toBe(state.max_continues);
   });
+
+  test("objective run does not double-dispatch on duplicate idle events", async () => {
+    await withTempDir(async (dir) => {
+      let resolvePrompt: (() => void) | undefined;
+      let resolvePromptStarted: (() => void) | undefined;
+      const promptStarted = new Promise<void>((resolve) => {
+        resolvePromptStarted = resolve;
+      });
+      let promptCalls = 0;
+      const plugin = await AutopilotPlugin({
+        directory: dir,
+        worktree: dir,
+        client: {
+          tui: { showToast: async () => {} },
+          session: {
+            promptAsync: async () => {
+              promptCalls += 1;
+              resolvePromptStarted?.();
+              await new Promise<void>((resolve) => {
+                resolvePrompt = resolve;
+              });
+            },
+          },
+        },
+      } as never);
+      const autopilotTool = plugin.tool?.autopilot;
+      const event = plugin.event as ((input: { event: unknown }) => Promise<void>) | undefined;
+      if (!autopilotTool || !event) {
+        throw new Error("expected plugin tool and event handler");
+      }
+
+      await autopilotTool.execute(
+        { action: "start", objective: "Fix tests without stopping until bun test passes" },
+        {
+          sessionID: "s1",
+          messageID: "m1",
+          agent: "pi",
+          directory: dir,
+          worktree: dir,
+          abort: new AbortController().signal,
+          metadata: () => {},
+          ask: async () => {},
+        },
+      );
+
+      const firstIdle = event({ event: { type: "session.idle", properties: { sessionID: "s1" } } });
+      await promptStarted;
+      await event({ event: { type: "session.idle", properties: { sessionID: "s1" } } });
+
+      expect(promptCalls).toBe(1);
+      resolvePrompt?.();
+      await firstIdle;
+    });
+  });
+
+  test("objective completion validates before final stop", async () => {
+    let promptCalls = 0;
+    const plugin = await AutopilotPlugin({
+      directory: "/tmp",
+      worktree: "/tmp",
+      client: {
+        tui: { showToast: async () => {} },
+        session: {
+          promptAsync: async () => {
+            promptCalls += 1;
+          },
+        },
+      },
+    } as never);
+    const autopilotTool = plugin.tool?.autopilot;
+    const event = plugin.event as ((input: { event: unknown }) => Promise<void>) | undefined;
+    if (!autopilotTool || !event) {
+      throw new Error("expected plugin tool and event handler");
+    }
+    const context = {
+      sessionID: "s1",
+      messageID: "m1",
+      agent: "pi",
+      directory: "/tmp",
+      worktree: "/tmp",
+      abort: new AbortController().signal,
+      metadata: () => {},
+      ask: async () => {},
+    };
+
+    await autopilotTool.execute(
+      { action: "start", objective: "Fix tests without stopping until bun test passes" },
+      context,
+    );
+    await event({ event: { type: "session.idle", properties: { sessionID: "s1" } } });
+    expect(promptCalls).toBe(1);
+
+    await event({
+      event: {
+        type: "message.updated",
+        properties: { info: { sessionID: "s1", id: "msg-1", role: "assistant", agent: "general" } },
+      },
+    });
+    await event({
+      event: {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            type: "text",
+            sessionID: "s1",
+            messageID: "msg-1",
+            id: "part-1",
+            text: '<autopilot status="complete">candidate done</autopilot>',
+          },
+        },
+      },
+    });
+    await event({ event: { type: "session.idle", properties: { sessionID: "s1" } } });
+    expect(promptCalls).toBe(2);
+    const validatingStatus = await autopilotTool.execute({ action: "status" }, context);
+    expect(validatingStatus).toContain("status=validating");
+    expect(validatingStatus).toContain("candidate done");
+
+    await event({
+      event: {
+        type: "message.updated",
+        properties: { info: { sessionID: "s1", id: "msg-2", role: "assistant", agent: "general" } },
+      },
+    });
+    await event({
+      event: {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            type: "text",
+            sessionID: "s1",
+            messageID: "msg-2",
+            id: "part-2",
+            text: '<autopilot status="complete">verified done</autopilot>',
+          },
+        },
+      },
+    });
+    await event({ event: { type: "session.idle", properties: { sessionID: "s1" } } });
+
+    expect(promptCalls).toBe(2);
+    const completedStatus = await autopilotTool.execute({ action: "status" }, context);
+    expect(completedStatus).toContain("status=completed");
+    expect(completedStatus).toContain("stop=COMPLETED");
+  });
+
+  test("resumed objective run with prior progress dispatches continuation", async () => {
+    let promptCalls = 0;
+    const plugin = await AutopilotPlugin({
+      directory: "/tmp",
+      worktree: "/tmp",
+      client: {
+        tui: { showToast: async () => {} },
+        session: {
+          promptAsync: async () => {
+            promptCalls += 1;
+          },
+        },
+      },
+    } as never);
+    const autopilotTool = plugin.tool?.autopilot;
+    const event = plugin.event as ((input: { event: unknown }) => Promise<void>) | undefined;
+    if (!autopilotTool || !event) {
+      throw new Error("expected plugin tool and event handler");
+    }
+    const context = {
+      sessionID: "s1",
+      messageID: "m1",
+      agent: "pi",
+      directory: "/tmp",
+      worktree: "/tmp",
+      abort: new AbortController().signal,
+      metadata: () => {},
+      ask: async () => {},
+    };
+
+    await autopilotTool.execute({ action: "start", objective: "Fix tests" }, context);
+    await event({ event: { type: "session.idle", properties: { sessionID: "s1" } } });
+    await event({
+      event: {
+        type: "message.updated",
+        properties: { info: { sessionID: "s1", id: "msg-1", role: "assistant", agent: "general" } },
+      },
+    });
+    await event({
+      event: {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            type: "text",
+            sessionID: "s1",
+            messageID: "msg-1",
+            id: "part-1",
+            text: '<autopilot status="continue">more work remains</autopilot>',
+          },
+        },
+      },
+    });
+    await event({ event: { type: "session.idle", properties: { sessionID: "s1" } } });
+    expect(promptCalls).toBe(2);
+
+    await autopilotTool.execute({ action: "pause" }, context);
+    await autopilotTool.execute({ action: "resume", permissionMode: "allow-all" }, context);
+    await event({ event: { type: "session.idle", properties: { sessionID: "s1" } } });
+
+    expect(promptCalls).toBe(3);
+  });
+
+  test("persists objective state across plugin instances", async () => {
+    await withTempDir(async (dir) => {
+      const createPlugin = async () => {
+        const plugin = await AutopilotPlugin({
+          directory: dir,
+          worktree: dir,
+          client: {
+            tui: { showToast: async () => {} },
+            session: { promptAsync: async () => {} },
+          },
+        } as never);
+        const autopilotTool = plugin.tool?.autopilot;
+        if (!autopilotTool) throw new Error("expected autopilot tool");
+        return autopilotTool;
+      };
+      const context = {
+        sessionID: "persisted-session",
+        messageID: "m1",
+        agent: "pi",
+        directory: dir,
+        worktree: dir,
+        abort: new AbortController().signal,
+        metadata: () => {},
+        ask: async () => {},
+      };
+
+      const firstTool = await createPlugin();
+      await firstTool.execute(
+        {
+          action: "start",
+          objective: "Persist this objective",
+          plan: "1. Do first thing\n2. Do second thing",
+        },
+        context,
+      );
+
+      const secondTool = await createPlugin();
+      const status = await secondTool.execute({ action: "status" }, context);
+
+      expect(status).toContain("Persist this objective");
+      expect(status).toContain("plan=0/2");
+    });
+  });
+
+  test("controller verification failure dispatches follow-up continuation", async () => {
+    const prompts: string[] = [];
+    const plugin = await AutopilotPlugin({
+      directory: "/tmp",
+      worktree: "/tmp",
+      client: {
+        tui: { showToast: async () => {} },
+        session: {
+          promptAsync: async (opts: { parts?: Array<{ text?: string }> }) => {
+            prompts.push(opts.parts?.[0]?.text ?? "");
+          },
+        },
+      },
+    } as never);
+    const autopilotTool = plugin.tool?.autopilot;
+    const event = plugin.event as ((input: { event: unknown }) => Promise<void>) | undefined;
+    if (!autopilotTool || !event) throw new Error("expected plugin hooks");
+    const context = {
+      sessionID: "verify-failure",
+      messageID: "m1",
+      agent: "pi",
+      directory: "/tmp",
+      worktree: "/tmp",
+      abort: new AbortController().signal,
+      metadata: () => {},
+      ask: async () => {},
+    };
+    const sendWorkerText = async (messageID: string, text: string) => {
+      await event({
+        event: {
+          type: "message.updated",
+          properties: {
+            info: {
+              sessionID: "verify-failure",
+              id: messageID,
+              role: "assistant",
+              agent: "general",
+            },
+          },
+        },
+      });
+      await event({
+        event: {
+          type: "message.part.updated",
+          properties: {
+            part: {
+              type: "text",
+              sessionID: "verify-failure",
+              messageID,
+              id: `${messageID}-part`,
+              text,
+            },
+          },
+        },
+      });
+      await event({ event: { type: "session.idle", properties: { sessionID: "verify-failure" } } });
+    };
+
+    await autopilotTool.execute(
+      { action: "start", objective: "Fix tests", verifyWith: "false", permissionMode: "allow-all" },
+      context,
+    );
+    await event({ event: { type: "session.idle", properties: { sessionID: "verify-failure" } } });
+    await sendWorkerText("msg-1", '<autopilot status="complete">Candidate done.</autopilot>');
+    await sendWorkerText("msg-2", '<autopilot status="complete">Verified by model.</autopilot>');
+
+    expect(prompts.at(-1)).toContain("Last verification failure");
+    const status = await autopilotTool.execute({ action: "status" }, context);
+    expect(status).toContain("status=waiting_for_reply");
+    expect(status).not.toContain("stop=COMPLETED");
+  });
+
+  test("verifyWith in limited mode blocks instead of looping", async () => {
+    const prompts: string[] = [];
+    const plugin = await AutopilotPlugin({
+      directory: "/tmp",
+      worktree: "/tmp",
+      client: {
+        tui: { showToast: async () => {} },
+        session: {
+          promptAsync: async (opts: { parts?: Array<{ text?: string }> }) => {
+            prompts.push(opts.parts?.[0]?.text ?? "");
+          },
+        },
+      },
+    } as never);
+    const autopilotTool = plugin.tool?.autopilot;
+    const event = plugin.event as ((input: { event: unknown }) => Promise<void>) | undefined;
+    if (!autopilotTool || !event) throw new Error("expected plugin hooks");
+    const context = {
+      sessionID: "verify-limited",
+      messageID: "m1",
+      agent: "pi",
+      directory: "/tmp",
+      worktree: "/tmp",
+      abort: new AbortController().signal,
+      metadata: () => {},
+      ask: async () => {},
+    };
+    const sendWorkerText = async (messageID: string, text: string) => {
+      await event({
+        event: {
+          type: "message.updated",
+          properties: {
+            info: {
+              sessionID: "verify-limited",
+              id: messageID,
+              role: "assistant",
+              agent: "general",
+            },
+          },
+        },
+      });
+      await event({
+        event: {
+          type: "message.part.updated",
+          properties: {
+            part: {
+              type: "text",
+              sessionID: "verify-limited",
+              messageID,
+              id: `${messageID}-part`,
+              text,
+            },
+          },
+        },
+      });
+      await event({ event: { type: "session.idle", properties: { sessionID: "verify-limited" } } });
+    };
+
+    await autopilotTool.execute(
+      { action: "start", objective: "Fix tests", verifyWith: "true" },
+      context,
+    );
+    await event({ event: { type: "session.idle", properties: { sessionID: "verify-limited" } } });
+    await sendWorkerText("limited-1", '<autopilot status="complete">Candidate done.</autopilot>');
+    await sendWorkerText(
+      "limited-2",
+      '<autopilot status="complete">Verified by model.</autopilot>',
+    );
+
+    expect(prompts).toHaveLength(2);
+    const status = await autopilotTool.execute({ action: "status" }, context);
+    expect(status).toContain("status=blocked");
+    expect(status).toContain("requires allow-all");
+  });
+
+  test("plan-backed objective run advances steps and validates at the end", async () => {
+    const prompts: string[] = [];
+    const plugin = await AutopilotPlugin({
+      directory: "/tmp",
+      worktree: "/tmp",
+      client: {
+        tui: { showToast: async () => {} },
+        session: {
+          promptAsync: async (opts: { parts?: Array<{ text?: string }> }) => {
+            prompts.push(opts.parts?.[0]?.text ?? "");
+          },
+        },
+      },
+    } as never);
+    const autopilotTool = plugin.tool?.autopilot;
+    const event = plugin.event as ((input: { event: unknown }) => Promise<void>) | undefined;
+    if (!autopilotTool || !event) {
+      throw new Error("expected plugin tool and event handler");
+    }
+    const context = {
+      sessionID: "s1",
+      messageID: "m1",
+      agent: "pi",
+      directory: "/tmp",
+      worktree: "/tmp",
+      abort: new AbortController().signal,
+      metadata: () => {},
+      ask: async () => {},
+    };
+    const sendWorkerText = async (messageID: string, text: string) => {
+      await event({
+        event: {
+          type: "message.updated",
+          properties: {
+            info: { sessionID: "s1", id: messageID, role: "assistant", agent: "general" },
+          },
+        },
+      });
+      await event({
+        event: {
+          type: "message.part.updated",
+          properties: {
+            part: {
+              type: "text",
+              sessionID: "s1",
+              messageID,
+              id: `${messageID}-part`,
+              text,
+            },
+          },
+        },
+      });
+      await event({ event: { type: "session.idle", properties: { sessionID: "s1" } } });
+    };
+
+    await autopilotTool.execute(
+      {
+        action: "start",
+        objective: "Implement PLAN.md",
+        plan: "1. Read PLAN.md\n2. Implement changes",
+      },
+      context,
+    );
+    await event({ event: { type: "session.idle", properties: { sessionID: "s1" } } });
+    expect(prompts).toHaveLength(1);
+    expect(prompts[0]).toContain("Autopilot plan step 1/2");
+    expect(prompts[0]).toContain("Current step: Read PLAN.md");
+
+    await sendWorkerText("msg-1", '<autopilot status="complete">Read the plan.</autopilot>');
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]).toContain("Autopilot plan step 2/2");
+    expect(prompts[1]).toContain("Current step: Implement changes");
+    const stepStatus = await autopilotTool.execute({ action: "status" }, context);
+    expect(stepStatus).toContain("plan=1/2");
+
+    await sendWorkerText("msg-2", '<autopilot status="step-done">Implemented changes.</autopilot>');
+    expect(prompts).toHaveLength(3);
+    expect(prompts[2]).toContain("Autopilot VALIDATION checkpoint");
+    const validatingStatus = await autopilotTool.execute({ action: "status" }, context);
+    expect(validatingStatus).toContain("status=validating");
+    expect(validatingStatus).toContain("plan=2/2");
+
+    await sendWorkerText(
+      "msg-3",
+      '<autopilot status="continue">Validation found a fix.</autopilot>',
+    );
+    expect(prompts).toHaveLength(4);
+    expect(prompts[3]).toContain("Autopilot continuation");
+    expect(prompts[3]).not.toContain("Autopilot plan step 2/2");
+    const fixingStatus = await autopilotTool.execute({ action: "status" }, context);
+    expect(fixingStatus).toContain("status=waiting_for_reply");
+
+    await sendWorkerText("msg-4", '<autopilot status="complete">Fix applied.</autopilot>');
+    expect(prompts).toHaveLength(5);
+    expect(prompts[4]).toContain("Autopilot VALIDATION checkpoint");
+
+    await sendWorkerText("msg-5", '<autopilot status="complete">Verified the plan.</autopilot>');
+    const completedStatus = await autopilotTool.execute({ action: "status" }, context);
+    expect(completedStatus).toContain("status=completed");
+    expect(completedStatus).toContain("stop=COMPLETED");
+  });
 });
 
 describe("Plugin Integration — permission hook", () => {
@@ -372,7 +885,7 @@ describe("Plugin Integration — system transform", () => {
     if (!prompt) throw new Error("expected system prompt");
     expect(prompt).toContain("Autopilot mode is active");
     expect(prompt).toContain("Follow the active spec workflow.");
-    expect(prompt).toContain('<autopilot status="continue|validate|complete|blocked">');
+    expect(prompt).toContain('<autopilot status="continue|step-done|validate|complete|blocked">');
   });
 
   test("skips delegated status prompt for non-worker turns", async () => {
@@ -405,7 +918,9 @@ describe("Plugin Integration — system transform", () => {
     if (!prompt) throw new Error("expected system prompt");
     expect(prompt).toContain("Autopilot mode is active");
     expect(prompt).toContain("Follow the active spec workflow.");
-    expect(prompt).not.toContain('<autopilot status="continue|validate|complete|blocked">');
+    expect(prompt).not.toContain(
+      '<autopilot status="continue|step-done|validate|complete|blocked">',
+    );
   });
 
   test("does not inject system prompt for disabled sessions", async () => {

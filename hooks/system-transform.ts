@@ -4,13 +4,19 @@
 // ---------------------------------------------------------------------------
 
 import type { AutopilotConfig } from "../config/autopilot-config.ts";
-import type { AutonomousStrength } from "../types/state.ts";
+import type { AutonomousStrength, PlanStep } from "../types/state.ts";
 
 export interface SystemTransformHookDeps {
   getState: (sessionID: string) =>
     | {
         mode: "DISABLED" | "ENABLED";
         session_mode: "session-defaults" | "delegated-task";
+        run_mode?: "ambient" | "objective";
+        objective?: string;
+        done_when?: string;
+        verify_with?: string;
+        plan?: PlanStep[];
+        active_step_index?: number;
         worker_agent: string;
         autonomous_strength: AutonomousStrength;
       }
@@ -64,12 +70,32 @@ export function createSystemTransformHook(
       output.system = [];
     }
 
-    output.system.push(
-      buildSystemPrompt(
-        state.autonomous_strength,
-        state.session_mode === "delegated-task",
-        getConfig(),
-      ),
+    const prompt = buildSystemPrompt(
+      state.autonomous_strength,
+      state.session_mode === "delegated-task",
+      getConfig(),
     );
+    const activeStep = state.plan?.[state.active_step_index ?? -1];
+
+    if (state.run_mode === "objective") {
+      output.system.push(
+        [
+          prompt,
+          "",
+          "Active autopilot objective:",
+          state.objective ?? "",
+          state.done_when ? `Done when: ${state.done_when}` : undefined,
+          state.verify_with ? `Verify with: ${state.verify_with}` : undefined,
+          state.plan && state.plan.length > 0 ? `Plan steps: ${state.plan.length}` : undefined,
+          activeStep ? `Current plan step: ${activeStep.title}` : undefined,
+          "Treat this objective as the controlling target for autonomous continuation nudges until it is completed, blocked, paused, or cleared.",
+        ]
+          .filter((line): line is string => Boolean(line))
+          .join("\n"),
+      );
+      return;
+    }
+
+    output.system.push(prompt);
   };
 }

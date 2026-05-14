@@ -83,7 +83,7 @@ describe("autopilot config", () => {
       buildContinuationPrompt({
         continueCount: 1,
         maxContinues: 3,
-        task: "Implement feature",
+        objective: "Implement feature",
         config,
       }),
     ).toContain("Complete the next spec checklist item.");
@@ -91,7 +91,7 @@ describe("autopilot config", () => {
       buildContinuationPrompt({
         continueCount: 1,
         maxContinues: 3,
-        task: "Implement feature",
+        objective: "Implement feature",
         isValidation: true,
         config,
       }),

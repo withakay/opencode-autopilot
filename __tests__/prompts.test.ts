@@ -4,6 +4,8 @@ import {
   AUTOPILOT_DEFAULT_MAX_CONTINUES,
   AUTOPILOT_MAX_CONTINUES_HARD_LIMIT,
   buildContinuationPrompt,
+  buildObjectiveStartPrompt,
+  buildPlanStepPrompt,
   inferAutopilotDirective,
   normalizeMaxContinues,
   parseAutopilotMarker,
@@ -32,6 +34,17 @@ describe("autopilot markers", () => {
     ).toEqual({
       status: "complete",
       reason: "All tasks finished.",
+    });
+  });
+
+  test("parses a step-done marker", () => {
+    expect(
+      parseAutopilotMarker(
+        'Step finished.\n<autopilot status="step-done">Tests added.</autopilot>',
+      ),
+    ).toEqual({
+      status: "step-done",
+      reason: "Tests added.",
     });
   });
 
@@ -105,11 +118,48 @@ describe("buildContinuationPrompt", () => {
     const prompt = buildContinuationPrompt({
       continueCount: 2,
       maxContinues: 5,
-      task: "Fix the failing tests",
+      objective: "Fix the failing tests",
     });
 
     expect(prompt).toContain("Autopilot continuation 2/5.");
-    expect(prompt).toContain("Original task: Fix the failing tests");
+    expect(prompt).toContain("Objective: Fix the failing tests");
+  });
+
+  test("includes objective run contract fields", () => {
+    const prompt = buildObjectiveStartPrompt({
+      objective: "Complete PLAN.md",
+      doneWhen: "tests pass",
+      verifyWith: "bun test",
+      planningFramework: "Ito",
+      planSource: ".ito",
+    });
+
+    expect(prompt).toContain("Autopilot objective run started");
+    expect(prompt).toContain("Objective: Complete PLAN.md");
+    expect(prompt).toContain("Done when: tests pass");
+    expect(prompt).toContain("Verify with: bun test");
+    expect(prompt).toContain("Planning framework: Ito");
+    expect(prompt).toContain("Ito changes/specs");
+  });
+
+  test("builds plan step prompts", () => {
+    const prompt = buildPlanStepPrompt({
+      continueCount: 1,
+      maxContinues: 5,
+      objective: "Implement PLAN.md",
+      step: {
+        id: "step-1",
+        title: "Read PLAN.md",
+        description: "Read the implementation plan before editing.",
+        status: "in_progress",
+      },
+      stepIndex: 0,
+      stepCount: 3,
+    });
+
+    expect(prompt).toContain("Autopilot plan step 1/3");
+    expect(prompt).toContain("Current step: Read PLAN.md");
+    expect(prompt).toContain('<autopilot status="step-done">');
   });
 });
 
@@ -149,7 +199,7 @@ describe("buildAutopilotSystemPrompt", () => {
     const aggressive = buildAutopilotSystemPrompt("aggressive");
 
     for (const prompt of [conservative, balanced, aggressive]) {
-      expect(prompt).toContain('<autopilot status="continue|validate|complete|blocked">');
+      expect(prompt).toContain('<autopilot status="continue|step-done|validate|complete|blocked">');
       expect(prompt).toContain("Do not omit the marker");
     }
   });

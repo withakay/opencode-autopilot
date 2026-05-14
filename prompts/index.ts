@@ -1,5 +1,9 @@
-export type { ContinuationPromptOptions } from "./continuation.ts";
-export { buildContinuationPrompt } from "./continuation.ts";
+export type { ContinuationPromptOptions, PlanStepPromptOptions } from "./continuation.ts";
+export {
+  buildContinuationPrompt,
+  buildObjectiveStartPrompt,
+  buildPlanStepPrompt,
+} from "./continuation.ts";
 export type {
   AutopilotDirective,
   AutopilotDirectiveStatus,

@@ -2,83 +2,105 @@
   "$schema": "./wingman-config.schema.json",
   "description": "Autopilot Wingman Configuration - Define subagents with specific models",
   "wingmen": {
-    "Autopilot-Wingman-GLM51": {
-      "description": "Fast, efficient general-purpose assistant",
+    "Autopilot-Wingman-OpenAI-GPT55": {
+      "description": "High-capability OpenAI model for coding and analysis",
       "model": {
-        "provider": "chutes",
-        "model": "chutes/zai-org/GLM-5.1-TEE"
-      },
-      "strength": "balanced",
-      "roles": ["general", "quick-tasks", "drafting"]
-    },
-    "Autopilot-Wingman-Kimi25": {
-      "description": "Strong reasoning and coding capabilities",
-      "model": {
-        "provider": "chutes",
-        "model": "chutes/moonshotai/Kimi-K2.5-TEE"
+        "provider": "openai",
+        "model": "openai/gpt-5.5"
       },
       "strength": "aggressive",
       "roles": ["coding", "analysis", "refactoring"]
     },
-    "Autopilot-Wingman-MiniMax25": {
-      "description": "Balanced performance for most tasks",
+    "Autopilot-Wingman-OpenAI-GPT55Pro": {
+      "description": "Deep OpenAI reasoning model for architecture and planning",
       "model": {
-        "provider": "chutes",
-        "model": "chutes/MiniMaxAI/MiniMax-M2.5-TEE"
+        "provider": "openai",
+        "model": "openai/gpt-5.5-pro"
+      },
+      "strength": "aggressive",
+      "roles": ["complex-reasoning", "architecture", "planning"]
+    },
+    "Autopilot-Wingman-OpenAI-GPT54Mini": {
+      "description": "Fast OpenAI model for quick tasks and drafting",
+      "model": {
+        "provider": "openai",
+        "model": "openai/gpt-5.4-mini"
+      },
+      "strength": "balanced",
+      "roles": ["general", "quick-tasks", "drafting"]
+    },
+    "Autopilot-Wingman-Go-Kimi26": {
+      "description": "OpenCode Go Kimi model for open-model coding work",
+      "model": {
+        "provider": "opencode-go",
+        "model": "opencode-go/kimi-k2.6"
+      },
+      "strength": "aggressive",
+      "roles": ["coding", "analysis", "large-context"]
+    },
+    "Autopilot-Wingman-Go-GLM51": {
+      "description": "OpenCode Go GLM model for reasoning-heavy open-model tasks",
+      "model": {
+        "provider": "opencode-go",
+        "model": "opencode-go/glm-5.1"
+      },
+      "strength": "aggressive",
+      "roles": ["reasoning", "planning", "analysis"]
+    },
+    "Autopilot-Wingman-Go-Qwen35Plus": {
+      "description": "OpenCode Go Qwen model for efficient general-purpose work",
+      "model": {
+        "provider": "opencode-go",
+        "model": "opencode-go/qwen3.5-plus"
       },
       "strength": "balanced",
       "roles": ["general", "testing", "documentation"]
     },
-    "Autopilot-Wingman-GH-GPT54": {
-      "description": "Latest GPT model via GitHub Copilot",
+    "Autopilot-Wingman-Go-MiniMax27": {
+      "description": "OpenCode Go MiniMax model for balanced coding and validation",
       "model": {
-        "provider": "github-copilot",
-        "model": "github-copilot/gpt-5.4"
+        "provider": "opencode-go",
+        "model": "opencode-go/minimax-m2.7"
       },
       "strength": "balanced",
-      "roles": ["complex-reasoning", "architecture", "planning"]
+      "roles": ["code-review", "validation", "testing"]
     },
-    "Autopilot-Wingman-GH-Gemini31": {
-      "description": "Google Gemini Pro for multimodal tasks",
+    "Autopilot-Wingman-Go-DeepSeekV4Flash": {
+      "description": "OpenCode Go DeepSeek model for fast low-cost tasks",
       "model": {
-        "provider": "github-copilot",
-        "model": "github-copilot/gemini-3.1-pro-preview"
+        "provider": "opencode-go",
+        "model": "opencode-go/deepseek-v4-flash"
       },
-      "strength": "aggressive",
-      "roles": ["large-context", "documentation", "research"]
-    },
-    "Autopilot-Wingman-GH-Sonnet46": {
-      "description": "Claude Sonnet for careful, thorough work",
-      "model": {
-        "provider": "github-copilot",
-        "model": "github-copilot/claude-sonnet-4.6"
-      },
-      "strength": "conservative",
-      "roles": ["code-review", "validation", "safety-critical"]
+      "strength": "balanced",
+      "roles": ["quick-tasks", "drafting", "general"]
     }
   },
   "routing": {
-    "default": "Autopilot-Wingman-Kimi25",
+    "default": "Autopilot-Wingman-OpenAI-GPT55",
     "rules": [
       {
-        "taskPattern": "test|spec|validate",
-        "wingman": "Autopilot-Wingman-GH-Sonnet46"
+        "taskPattern": "test|spec|validate|review",
+        "wingman": "Autopilot-Wingman-Go-MiniMax27"
       },
       {
-        "taskPattern": "refactor|clean|simplify",
-        "wingman": "Autopilot-Wingman-Kimi25"
+        "taskPattern": "refactor|clean|simplify|implement|code",
+        "wingman": "Autopilot-Wingman-Go-Kimi26"
       },
       {
-        "taskPattern": "document|readme|explain",
-        "wingman": "Autopilot-Wingman-GH-Gemini31"
+        "taskPattern": "document|readme|explain|research|large-context",
+        "wingman": "Autopilot-Wingman-Go-Kimi26"
       },
       {
-        "taskPattern": "quick|simple|draft",
-        "wingman": "Autopilot-Wingman-GLM51"
+        "taskPattern": "quick|simple|draft|small",
+        "wingman": "Autopilot-Wingman-Go-DeepSeekV4Flash"
       },
       {
-        "taskPattern": "design|architecture|plan",
-        "wingman": "Autopilot-Wingman-GH-GPT54"
+        "taskPattern": "design|architecture|plan|complex|reason",
+        "wingman": "Autopilot-Wingman-OpenAI-GPT55Pro"
+      },
+      {
+        "taskPattern": "general|testing|docs",
+        "wingman": "Autopilot-Wingman-Go-Qwen35Plus"
       }
     ]
   }

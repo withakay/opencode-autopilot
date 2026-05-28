@@ -1,7 +1,7 @@
 {
   "name": "@withakay/opencode-autopilot",
-  "version": "0.4.0",
-  "description": "Autopilot mode plugin for OpenCode - autonomous multi-step task continuation",
+  "version": "0.4.2",
+  "description": "Autopilot plugin for OpenCode - autonomous multi-step task continuation slop generator",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -39,7 +39,7 @@
     "ai",
     "coding"
   ],
-  "author": "Jack Waring",
+  "author": "Withakay",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -54,10 +54,10 @@
     "@opencode-ai/sdk": "^1.3.0"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.8",
-    "@opencode-ai/plugin": "^1.3.0",
-    "@opencode-ai/sdk": "^1.3.0",
-    "bun-types": "^1.3.11",
-    "typescript": "^6.0.2"
+    "@biomejs/biome": "^2.4.15",
+    "@opencode-ai/plugin": "^1.14.50",
+    "@opencode-ai/sdk": "^1.14.50",
+    "bun-types": "^1.3.14",
+    "typescript": "^6.0.3"
   }
 }

@@ -1,8 +1,8 @@
 # @withakay/opencode-autopilot
 
-Autopilot plugin for OpenCode — session-scoped autonomy defaults plus optional delegated long-running work.
+Autopilot plugin for OpenCode. It adds a `/autopilot` command for session-level autonomy and durable objective runs that keep nudging a worker agent until the work is complete, blocked, paused, cleared, or the continuation limit is reached.
 
-## Installation
+## Install
 
 ```bash
 npm install @withakay/opencode-autopilot
@@ -10,30 +10,7 @@ npm install @withakay/opencode-autopilot
 bun add @withakay/opencode-autopilot
 ```
 
-### What gets installed for end users
-
-On install, the package runs a postinstall script that provisions OpenCode assets into the consuming project:
-
-- `.opencode/commands/autopilot.md` — the `/autopilot` slash command
-- `.opencode/agents/Autopilot-Wingman-GLM51.md`
-- `.opencode/agents/Autopilot-Wingman-Kimi25.md`
-- `.opencode/agents/Autopilot-Wingman-MiniMax25.md`
-- `.opencode/agents/Autopilot-Wingman-GH-GPT54.md`
-- `.opencode/agents/Autopilot-Wingman-GH-Gemini31.md`
-- `.opencode/agents/Autopilot-Wingman-GH-Sonnet46.md`
-- `.opencode/wingman-config.json` — routing/reference config for the packaged Wingman presets
-
-The installer is non-destructive for Wingman assets:
-
-- existing Wingman agent files are preserved if you have customized them
-- existing `wingman-config.json` is preserved if you have customized it
-- the `/autopilot` slash command is updated to the packaged version when it changes
-
-This package does **not** dynamically register slash commands or agents through the plugin API. Instead, it installs the corresponding OpenCode markdown assets into your project so they are available to end users immediately.
-
-## Usage
-
-Register the plugin in your `opencode.jsonc`:
+Register the plugin in `opencode.jsonc`:
 
 ```jsonc
 {
@@ -43,26 +20,112 @@ Register the plugin in your `opencode.jsonc`:
 }
 ```
 
-The plugin registers a single `autopilot` control tool:
+## What Gets Installed
 
-- **`autopilot`** — Turn autopilot on or off, show status, or start a delegated task
+The package postinstall script provisions OpenCode assets into the consuming project:
 
-### Slash command entry point
+| Asset | Purpose |
+|---|---|
+| `.opencode/commands/autopilot.md` | `/autopilot` slash command |
+| `.opencode/agents/Autopilot-Wingman-*.md` | Optional packaged worker agents |
+| `.opencode/wingman-config.json` | Reference config for packaged worker agents |
 
-OpenCode custom slash commands live in `.opencode/commands/`. This repo includes `/autopilot` at `.opencode/commands/autopilot.md`.
+The installer is non-destructive for customized Wingman assets:
 
-After registering the plugin, the primary UX is:
+- existing Wingman agent files are preserved
+- existing `wingman-config.json` is preserved
+- the `/autopilot` slash command is updated to the packaged version when it changes
 
-- **`/autopilot on`** — enable autopilot for the rest of the session
-- **`/autopilot off`** — disable autopilot
-- **`/autopilot status`** — inspect current state
-- **`/autopilot <task>`** — enable autopilot and delegate a long-running task immediately
+OpenCode plugins do not dynamically register slash commands or agents, so this package installs the corresponding markdown assets into your project.
 
-### Packaged Wingman agents
+## Usage
 
-The package also installs a set of reusable Wingman agents in `.opencode/agents/` for delegated work. These can be referenced by name when you want autopilot to use a specific worker agent.
+Use the slash command in an OpenCode session:
 
-Available packaged agents:
+| Command | Behavior |
+|---|---|
+| `/autopilot on` | Enables ambient autonomy defaults for the session. |
+| `/autopilot off` or `/autopilot stop` | Disables autopilot. |
+| `/autopilot status` | Shows the current autopilot state and recent events. |
+| `/autopilot <objective>` | Starts an objective run for the given work. |
+| `/autopilot pause` | Pauses the active objective run. |
+| `/autopilot resume` | Resumes a paused or blocked objective run. |
+| `/autopilot clear` | Clears the active objective run. |
+
+Examples:
+
+```text
+/autopilot on
+/autopilot Fix the failing tests without stopping until bun test passes
+/autopilot Implement PLAN.md and validate with bun test
+/autopilot status
+```
+
+## Modes
+
+Autopilot has two main modes:
+
+| Mode | How To Start | What It Does |
+|---|---|---|
+| Ambient autonomy | `/autopilot on` | Injects guidance that makes the active agent choose safe defaults and ask fewer routine questions. It does not start a continuation loop. |
+| Objective run | `/autopilot <objective>` | Delegates work to a worker agent and continues prompting it until the objective reaches a terminal state. |
+
+Objective runs are best when the prompt includes a verifiable stopping condition:
+
+```text
+/autopilot Complete the parser refactor without stopping until bun test and bun run typecheck pass
+```
+
+## Plans And Specs
+
+Autopilot can work from plan/spec language in the objective. It infers likely planning context from the objective, inline plan text, and repository artifacts such as `PLAN.md`, `specs/`, `.ito`, `openspec`, or `.specify`.
+
+Users do not need to specify a plan framework. Phrases like "follow the plan", "apply the spec", "implement the proposal", or "continue the accepted change" are enough for autopilot to look for relevant context before continuing.
+
+## Goal Contracts And Run Cards
+
+Objective runs now create a structured goal contract from the prompt, `doneWhen`, `verifyWith`, plan text, and detected plan/spec sources. The contract tracks:
+
+- goal quality (`strong`, `inferred`, or `weak`)
+- stop condition
+- read-first sources such as `PLAN.md` or `specs/...`
+- acceptance criteria derived from `doneWhen`, `verifyWith`, or plan steps
+- checkpoint evidence and the latest verification result
+
+Use `/autopilot status` to inspect a human-readable run card while the objective is running:
+
+```text
+Autopilot status: ...
+
+## Autopilot Run Card
+Objective: Fix the failing tests without stopping until bun test passes
+Status: active (ENABLED)
+Goal quality: strong
+Stop condition: bun test passes
+Current checkpoint: Repair verification failure (active)
+Acceptance criteria:
+• bun test passes
+• Verification command passes: bun test
+Last verification: failed — Verification command failed (bun test): ...
+Budget: continuation 3/10; agent general
+```
+
+When a run completes, blocks, fails, or is cleared, the status includes a final digest with the stop reason, recent evidence, and a suggested next action when applicable.
+
+## Permissions
+
+Autopilot supports two permission modes:
+
+| Mode | Behavior |
+|---|---|
+| `limited` | Default. Permission requests are denied and the objective blocks for the user. |
+| `allow-all` | Permission requests are allowed automatically. |
+
+`verifyWith` commands require `allow-all` because they run controller-side after the model claims the objective is complete.
+
+## Packaged Wingman Agents
+
+This package includes optional worker-agent presets:
 
 - `Autopilot-Wingman-GLM51`
 - `Autopilot-Wingman-Kimi25`
@@ -71,43 +134,16 @@ Available packaged agents:
 - `Autopilot-Wingman-GH-Gemini31`
 - `Autopilot-Wingman-GH-Sonnet46`
 
-Example direct tool usage with a packaged Wingman:
+Most users can ignore these and use the default worker agent. They are available if you want to route objective runs to a specific model/profile.
 
-- `autopilot(task="Fix the failing tests", workerAgent="Autopilot-Wingman-GH-Sonnet46")`
-- `autopilot(task="Refactor the reducer logic", workerAgent="Autopilot-Wingman-Kimi25")`
-- `autopilot(task="Summarize the architecture", workerAgent="Autopilot-Wingman-GH-Gemini31")`
+## Optional Repo Config
 
-If you prefer to call the tool directly, use:
-
-```jsonc
-{
-  "tool": {
-    "autopilot": true
-  }
-}
-```
-
-Examples:
-
-- `autopilot(action="on")`
-- `autopilot(action="status")`
-- `autopilot(task="Fix the failing tests", workerAgent="build-high")`
-- `autopilot(action="on", autonomousStrength="aggressive")`
-
-### Optional orchestrator agent
-
-Autopilot no longer requires a dedicated control agent, but delegated work still runs through a configured agent (`general` by default). You can think of that agent as the orchestrator or overwatch worker that keeps a long-running task moving after `/autopilot <task>`.
-
-### Optional repo config
-
-Autopilot can read optional repo-local configuration from:
+Autopilot reads optional repo-local config from:
 
 - `.autopilot/config.jsonc`
 - `.autopilot/config.json`
 
-If both exist, `config.jsonc` wins. If neither exists, autopilot uses its built-in behavior.
-
-This config is intentionally lightweight and prompt-oriented. It lets you add workflow/spec hints without creating a hard dependency on any specific spec framework.
+If both exist, `config.jsonc` wins. If neither exists, autopilot uses built-in behavior.
 
 Example:
 
@@ -115,8 +151,7 @@ Example:
 {
   "promptInjection": {
     "system": [
-      "Follow the active spec workflow if present.",
-      "Do the next checklist item instead of asking for routine confirmation."
+      "Follow the active spec workflow if present."
     ],
     "continuation": [
       "Keep working through the current spec checklist."
@@ -130,12 +165,10 @@ Example:
   },
   "directiveRules": {
     "blockedPatterns": [
-      "missing acceptance criteria",
-      "waiting for spec clarification"
+      "missing acceptance criteria"
     ],
     "highImpactPatterns": [
-      "schema migration",
-      "breaking API change"
+      "schema migration"
     ]
   },
   "workflow": {
@@ -155,102 +188,68 @@ Example:
 }
 ```
 
-What it does:
+Config fields:
 
-- `promptInjection.system` appends repo-specific workflow hints to the autopilot system prompt
-- `promptInjection.continuation` appends hints to each continuation prompt
-- `promptInjection.validation` appends hints to validation checkpoints
-- `promptInjection.compaction` appends hints to the compaction context
-- `directiveRules.blockedPatterns` extends blocker detection for responses without explicit autopilot markers
-- `directiveRules.highImpactPatterns` extends high-impact detection so autopilot stops instead of auto-continuing
-- `workflow` adds structured workflow/spec reminders to compaction context
+| Field | Purpose |
+|---|---|
+| `promptInjection.system` | Adds repo-specific hints to the autopilot system prompt. |
+| `promptInjection.continuation` | Adds hints to continuation prompts. |
+| `promptInjection.validation` | Adds hints to validation checkpoints. |
+| `promptInjection.compaction` | Adds hints to compaction context. |
+| `directiveRules.blockedPatterns` | Adds literal phrases that should block continuation. |
+| `directiveRules.highImpactPatterns` | Adds literal phrases that should stop for user input. |
+| `workflow` | Adds structured workflow reminders to compaction context. |
 
-### Autonomous Strength Modes
+## Agent-Facing Details
 
-Control how strongly autopilot biases toward autonomous decision-making:
+You are right that some instructions can look like they belong in an agent prompt rather than a README. The agent-facing behavior is intentionally kept in these files:
 
-- **`conservative`** — Soft guidance to prefer defaults; asks when unsure (similar to previous behavior)
-- **`balanced`** (default) — Stronger bias toward selecting recommended/safe defaults with minimal user interaction
-- **`aggressive`** — Always pick recommended/safe defaults for routine choices; only escalate high-impact decisions (data deletion, major refactors) or security/safety risks
+| File | Audience |
+|---|---|
+| `.opencode/commands/autopilot.md` | Slash-command argument interpretation for OpenCode agents. |
+| `prompts/system-prompt.ts` | Runtime autonomy guidance injected into agent context. |
+| `prompts/continuation.ts` | Continuation, validation, and plan-step prompts. |
+| `prompts/directives.ts` | Internal status marker parsing and fallback directive inference. |
 
-The autonomous strength affects the system prompt guidance injected into the agent's context. Aggressive mode includes explicit rules to select recommended defaults without asking, while conservative mode provides softer suggestions.
-
-### Permission Modes
-
-- **`limited`** (default) — Auto-denies all permission requests; blocks on first denial
-- **`allow-all`** — Auto-allows all permission requests
-
-### Question handling
-
-OpenCode currently exposes direct permission interception but not a general question-timeout hook through the plugin API. This plugin therefore:
-
-- auto-handles permission prompts according to the selected permission mode
-- injects system prompt guidance based on the autonomous strength setting to bias the agent toward recommended defaults
-- still escalates to the user when no safe default exists or for high-impact decisions
-
-The autonomous strength parameter controls how strongly this guidance is worded. In aggressive mode, the system prompt explicitly instructs the agent to always select recommended/safe defaults for routine choices (file paths, variable names, configurations) without asking the user.
+The README should stay human-facing: install, configure, use, and develop the plugin.
 
 ## Architecture
 
-The plugin is intentionally small: it uses OpenCode hooks to add session-scoped autonomy guidance, intercept permissions, preserve autopilot state during compaction, and drive an optional delegated-task continuation loop.
+The plugin uses OpenCode hooks to add autonomy guidance, manage permissions, preserve state during compaction, and drive objective-run continuations.
 
-### Runtime integration points
-
-| Hook / surface | Purpose |
-|----------------|---------|
-| `tool.autopilot` | Enables/disables autopilot, reports status, or starts a delegated task |
-| `permission.ask` | Applies `limited` or `allow-all` permission policy while autopilot is enabled |
-| `experimental.chat.system.transform` | Injects autonomy guidance; delegated worker turns also receive status-marker instructions |
-| `chat.message` | Tracks the pending agent so delegated status markers are scoped to the configured worker |
-| `experimental.session.compacting` | Preserves autopilot goal, worker, continuation count, and recent events across compaction |
-| `event` | Watches message/session events and continues delegated tasks on `session.idle` |
-| `tool.execute.after` | Removes internal autopilot markers from autopilot tool output |
-
-The continuation loop relies on explicit assistant status markers for delegated work:
-
-```xml
-<autopilot status="continue|validate|complete|blocked">short reason</autopilot>
-```
-
-If a worker asks a routine confirmation question like "Do you want me to run the tests?", the plugin treats that as `continue` and sends the next continuation prompt. High-impact or genuinely blocked questions still stop for user input.
+| Hook / Surface | Purpose |
+|---|---|
+| `tool.autopilot` | Enables/disables autopilot, reports status, or starts an objective run. |
+| `permission.ask` | Applies `limited` or `allow-all` permission policy while autopilot is enabled. |
+| `experimental.chat.system.transform` | Injects autonomy guidance into the active agent context. |
+| `chat.message` | Tracks the pending agent so delegated prompts are scoped to the worker. |
+| `experimental.session.compacting` | Preserves autopilot state and recent events across compaction. |
+| `event` | Watches session/message events and continues objective runs on `session.idle`. |
+| `tool.execute.after` | Cleans internal autopilot markers from autopilot tool output. |
 
 ## Development
 
 ```bash
-# Install dependencies
 bun install
-
-# Type check
 bun run typecheck
-
-# Run tests
-bun test
-
-# Build
+bun test ./__tests__/
+bun run lint
 bun run build
 ```
 
-## File Layout
+## Repository Layout
 
-```
-src/
-  index.ts                      # Entry point — exports AutopilotPlugin
-  plugin.ts                     # Plugin function (OpenCode hook wiring)
-  types/                        # Type definitions
-    index.ts, mode.ts, phase.ts, stop-reason.ts, state.ts
-  state/                        # State factory, session cache
-    index.ts, factory.ts, session-cache.ts
-  prompts/                      # System prompt, continuation, directives
-    index.ts, system-prompt.ts, continuation.ts,
-    directives.ts, normalize.ts, format.ts
-  hooks/                        # OpenCode hook handlers
-    index.ts, event-handler.ts, permission.ts,
-    system-transform.ts, session-compacting.ts,
-    chat-message.ts, tool-after.ts
-  tools/                        # Tool definitions
-    index.ts, autopilot.ts, usage.ts
-  __tests__/                    # All test files
-    prompts.test.ts, plugin.test.ts, autopilot-tool.test.ts
+```text
+index.ts                    # package entry point
+plugin.ts                   # OpenCode plugin factory and continuation controller
+config/                     # optional .autopilot/config loading
+hooks/                      # OpenCode hook handlers
+prompts/                    # prompt builders, directives, status formatting
+state/                      # state factory, persistence, session cache
+tools/                      # autopilot tool, plan parsing, planning inference
+types/                      # shared runtime types
+__tests__/                  # unit/integration tests
+__tests__/e2e/              # opt-in behavioral PTY/simulation tests
 ```
 
 ## License

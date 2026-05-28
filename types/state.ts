@@ -14,6 +14,11 @@ export type AutopilotRunStatus =
   | "failed"
   | "cleared";
 export type PlanStepStatus = "pending" | "in_progress" | "done";
+export type GoalQuality = "strong" | "inferred" | "weak";
+export type GoalCriterionStatus = "pending" | "verified" | "unverified";
+export type CheckpointStatus = "active" | "done" | "blocked" | "failed";
+export type VerificationStatus = "not-run" | "passed" | "failed" | "blocked";
+export type DigestStatus = "completed" | "blocked" | "failed" | "cleared";
 
 export interface PlanStep {
   id: string;
@@ -21,6 +26,44 @@ export interface PlanStep {
   description: string;
   status: PlanStepStatus;
   evidence?: string;
+}
+
+export interface GoalCriterion {
+  id: string;
+  text: string;
+  status: GoalCriterionStatus;
+  evidence?: string;
+}
+
+export interface GoalContract {
+  summary: string;
+  quality: GoalQuality;
+  stop_condition?: string;
+  required_sources: string[];
+  constraints: string[];
+  criteria: GoalCriterion[];
+}
+
+export interface Checkpoint {
+  id: string;
+  title: string;
+  status: CheckpointStatus;
+  evidence: string[];
+  started_at?: string;
+  completed_at?: string;
+}
+
+export interface VerificationRecord {
+  command?: string;
+  status: VerificationStatus;
+  summary: string;
+}
+
+export interface RunDigest {
+  status: DigestStatus;
+  reason: string;
+  evidence: string[];
+  next_action?: string;
 }
 
 export interface ExtendedState {
@@ -39,6 +82,11 @@ export interface ExtendedState {
   planning_framework?: string;
   candidate_completion?: string;
   plan: PlanStep[];
+  goal_contract: GoalContract;
+  checkpoints: Checkpoint[];
+  current_checkpoint?: string;
+  last_verification?: VerificationRecord;
+  final_digest?: RunDigest;
   active_step_index: number;
   stop_reason: StopReason | null;
   continuation_count: number;

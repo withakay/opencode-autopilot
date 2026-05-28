@@ -76,6 +76,7 @@ export function buildObjectiveStartPrompt(
     ...objectiveContract(options),
     "",
     "Start working toward this objective now. Work in concrete checkpoints and keep going until the objective is complete, blocked, paused, or the continuation limit is reached.",
+    "Maintain a concise progress ledger in your response: current checkpoint, evidence gathered, validation performed, remaining work, and blocker status.",
     ...planningGuidance(options),
     "Before stopping, audit whether the objective is complete, blocked, or still has a clear next action. If a clear next action remains, take it now instead of asking the user to continue.",
     "Use VALIDATE when you think the objective may be done but needs verification. Use COMPLETE only after verification proves the objective is done. Use BLOCKED only for a real blocker with no safe next action.",
@@ -94,9 +95,11 @@ export function buildPlanStepPrompt(options: PlanStepPromptOptions): string {
     `Step details: ${options.step.description}`,
     "",
     "Execute this step now. Keep working within this step until it is done, blocked, or needs validation.",
+    "Report evidence for this step clearly so the controller can add it to the checkpoint ledger.",
     ...planningGuidance(options),
     "When this step is fully done, end with:",
-    '<autopilot status="step-done">evidence for the completed step</autopilot>',
+    "**Autopilot status: step-done**",
+    "Evidence for the completed step.",
     "When all plan steps are done, the controller will validate the whole objective before final completion.",
     ...continuationHints,
   ].join("\n");
@@ -139,6 +142,7 @@ export function buildContinuationPrompt(options: ContinuationPromptOptions): str
       ? `Last verification failure: ${options.verificationFailure}`
       : undefined,
     "Review your latest progress, choose the next concrete step, and keep moving without waiting for the user.",
+    "Keep the run anchored to the objective contract: cite evidence, name the current checkpoint, and say what remains before marking done.",
     ...planningGuidance(options),
     "If the next obvious thing is to inspect, edit, test, validate, or summarize, do it now instead of asking whether to proceed.",
     "Use VALIDATE when you think you might be done but need to verify your work.",

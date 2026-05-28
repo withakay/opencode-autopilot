@@ -4,7 +4,7 @@
 // ---------------------------------------------------------------------------
 
 import type { AutopilotConfig } from "../config/autopilot-config.ts";
-import type { AutonomousStrength, PlanStep } from "../types/state.ts";
+import type { AutonomousStrength, Checkpoint, GoalContract, PlanStep } from "../types/state.ts";
 
 export interface SystemTransformHookDeps {
   getState: (sessionID: string) =>
@@ -15,6 +15,9 @@ export interface SystemTransformHookDeps {
         objective?: string;
         done_when?: string;
         verify_with?: string;
+        goal_contract?: GoalContract;
+        checkpoints?: Checkpoint[];
+        current_checkpoint?: string;
         plan?: PlanStep[];
         active_step_index?: number;
         worker_agent: string;
@@ -76,6 +79,9 @@ export function createSystemTransformHook(
       getConfig(),
     );
     const activeStep = state.plan?.[state.active_step_index ?? -1];
+    const activeCheckpoint = state.checkpoints?.find(
+      (checkpoint) => checkpoint.id === state.current_checkpoint,
+    );
 
     if (state.run_mode === "objective") {
       output.system.push(
@@ -86,8 +92,13 @@ export function createSystemTransformHook(
           state.objective ?? "",
           state.done_when ? `Done when: ${state.done_when}` : undefined,
           state.verify_with ? `Verify with: ${state.verify_with}` : undefined,
+          state.goal_contract ? `Goal quality: ${state.goal_contract.quality}` : undefined,
+          state.goal_contract?.criteria.length
+            ? `Acceptance criteria: ${state.goal_contract.criteria.map((criterion) => `${criterion.status}:${criterion.text}`).join("; ")}`
+            : undefined,
           state.plan && state.plan.length > 0 ? `Plan steps: ${state.plan.length}` : undefined,
           activeStep ? `Current plan step: ${activeStep.title}` : undefined,
+          activeCheckpoint ? `Current checkpoint: ${activeCheckpoint.title}` : undefined,
           "Treat this objective as the controlling target for autonomous continuation nudges until it is completed, blocked, paused, or cleared.",
         ]
           .filter((line): line is string => Boolean(line))

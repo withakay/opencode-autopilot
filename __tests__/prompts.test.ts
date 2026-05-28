@@ -10,8 +10,10 @@ import {
   normalizeMaxContinues,
   parseAutopilotMarker,
   stripAutopilotMarker,
+  summarizeAutopilotState,
 } from "../prompts/index.ts";
 import { buildAutopilotSystemPrompt } from "../prompts/system-prompt.ts";
+import { createSessionState } from "../state/factory.ts";
 
 describe("normalizeMaxContinues", () => {
   test("falls back for invalid input", () => {
@@ -30,7 +32,7 @@ describe("normalizeMaxContinues", () => {
 describe("autopilot markers", () => {
   test("parses an explicit marker", () => {
     expect(
-      parseAutopilotMarker('Done.\n<autopilot status="complete">All tasks finished.</autopilot>'),
+      parseAutopilotMarker("Done.\n**Autopilot status: complete**\nAll tasks finished."),
     ).toEqual({
       status: "complete",
       reason: "All tasks finished.",
@@ -39,9 +41,7 @@ describe("autopilot markers", () => {
 
   test("parses a step-done marker", () => {
     expect(
-      parseAutopilotMarker(
-        'Step finished.\n<autopilot status="step-done">Tests added.</autopilot>',
-      ),
+      parseAutopilotMarker("Step finished.\n**Autopilot status: step-done**\nTests added."),
     ).toEqual({
       status: "step-done",
       reason: "Tests added.",
@@ -49,17 +49,13 @@ describe("autopilot markers", () => {
   });
 
   test("strips the marker from assistant text", () => {
-    expect(stripAutopilotMarker('Hello\n<autopilot status="continue">keep going</autopilot>')).toBe(
-      "Hello",
-    );
+    expect(stripAutopilotMarker("Hello\n**Autopilot status: continue**\nkeep going")).toBe("Hello");
   });
 });
 
 describe("inferAutopilotDirective", () => {
   test("uses marker when present", () => {
-    expect(
-      inferAutopilotDirective('Hi\n<autopilot status="blocked">Missing token.</autopilot>'),
-    ).toEqual({
+    expect(inferAutopilotDirective("Hi\n**Autopilot status: blocked**\nMissing token.")).toEqual({
       status: "blocked",
       reason: "Missing token.",
     });
@@ -159,7 +155,27 @@ describe("buildContinuationPrompt", () => {
 
     expect(prompt).toContain("Autopilot plan step 1/3");
     expect(prompt).toContain("Current step: Read PLAN.md");
-    expect(prompt).toContain('<autopilot status="step-done">');
+    expect(prompt).toContain("**Autopilot status: step-done**");
+  });
+});
+
+describe("summarizeAutopilotState", () => {
+  test("renders a human-readable run card with contract and budget", () => {
+    const state = createSessionState("s1", "Fix tests without stopping until bun test passes", {
+      doneWhen: "bun test passes",
+      verifyWith: "bun test",
+      workerAgent: "general",
+    });
+
+    const summary = summarizeAutopilotState(state);
+
+    expect(summary).toContain("Autopilot status:");
+    expect(summary).toContain("## Autopilot Run Card");
+    expect(summary).toContain("Goal quality: strong");
+    expect(summary).toContain("Stop condition: bun test passes");
+    expect(summary).toContain("Acceptance criteria:");
+    expect(summary).toContain("Verification command passes: bun test");
+    expect(summary).toContain("Budget: continuation 0/25; agent general");
   });
 });
 
@@ -199,8 +215,10 @@ describe("buildAutopilotSystemPrompt", () => {
     const aggressive = buildAutopilotSystemPrompt("aggressive");
 
     for (const prompt of [conservative, balanced, aggressive]) {
-      expect(prompt).toContain('<autopilot status="continue|step-done|validate|complete|blocked">');
-      expect(prompt).toContain("Do not omit the marker");
+      expect(prompt).toContain(
+        "**Autopilot status: continue|step-done|validate|complete|blocked**",
+      );
+      expect(prompt).toContain("Do not omit the status block");
     }
   });
 });

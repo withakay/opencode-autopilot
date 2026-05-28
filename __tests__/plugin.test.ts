@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Effect } from "effect";
 import type { AutopilotConfig } from "../config/autopilot-config.ts";
 import { createChatMessageHook } from "../hooks/chat-message.ts";
 import type { SessionTracking } from "../hooks/event-handler.ts";
@@ -336,7 +337,7 @@ describe("Plugin Integration — event handler", () => {
           worktree: dir,
           abort: new AbortController().signal,
           metadata: () => {},
-          ask: async () => {},
+          ask: () => Effect.void,
         },
       );
 
@@ -377,7 +378,7 @@ describe("Plugin Integration — event handler", () => {
       worktree: "/tmp",
       abort: new AbortController().signal,
       metadata: () => {},
-      ask: async () => {},
+      ask: () => Effect.void,
     };
 
     await autopilotTool.execute(
@@ -402,7 +403,7 @@ describe("Plugin Integration — event handler", () => {
             sessionID: "s1",
             messageID: "msg-1",
             id: "part-1",
-            text: '<autopilot status="complete">candidate done</autopilot>',
+            text: "**Autopilot status: complete**\ncandidate done",
           },
         },
       },
@@ -428,7 +429,7 @@ describe("Plugin Integration — event handler", () => {
             sessionID: "s1",
             messageID: "msg-2",
             id: "part-2",
-            text: '<autopilot status="complete">verified done</autopilot>',
+            text: "**Autopilot status: complete**\nverified done",
           },
         },
       },
@@ -439,6 +440,8 @@ describe("Plugin Integration — event handler", () => {
     const completedStatus = await autopilotTool.execute({ action: "status" }, context);
     expect(completedStatus).toContain("status=completed");
     expect(completedStatus).toContain("stop=COMPLETED");
+    expect(completedStatus).toContain("Final digest:");
+    expect(completedStatus).toContain("Last verification: passed");
   });
 
   test("resumed objective run with prior progress dispatches continuation", async () => {
@@ -468,7 +471,7 @@ describe("Plugin Integration — event handler", () => {
       worktree: "/tmp",
       abort: new AbortController().signal,
       metadata: () => {},
-      ask: async () => {},
+      ask: () => Effect.void,
     };
 
     await autopilotTool.execute({ action: "start", objective: "Fix tests" }, context);
@@ -488,7 +491,7 @@ describe("Plugin Integration — event handler", () => {
             sessionID: "s1",
             messageID: "msg-1",
             id: "part-1",
-            text: '<autopilot status="continue">more work remains</autopilot>',
+            text: "**Autopilot status: continue**\nmore work remains",
           },
         },
       },
@@ -526,7 +529,7 @@ describe("Plugin Integration — event handler", () => {
         worktree: dir,
         abort: new AbortController().signal,
         metadata: () => {},
-        ask: async () => {},
+        ask: () => Effect.void,
       };
 
       const firstTool = await createPlugin();
@@ -572,7 +575,7 @@ describe("Plugin Integration — event handler", () => {
       worktree: "/tmp",
       abort: new AbortController().signal,
       metadata: () => {},
-      ask: async () => {},
+      ask: () => Effect.void,
     };
     const sendWorkerText = async (messageID: string, text: string) => {
       await event({
@@ -610,8 +613,8 @@ describe("Plugin Integration — event handler", () => {
       context,
     );
     await event({ event: { type: "session.idle", properties: { sessionID: "verify-failure" } } });
-    await sendWorkerText("msg-1", '<autopilot status="complete">Candidate done.</autopilot>');
-    await sendWorkerText("msg-2", '<autopilot status="complete">Verified by model.</autopilot>');
+    await sendWorkerText("msg-1", "**Autopilot status: complete**\nCandidate done.");
+    await sendWorkerText("msg-2", "**Autopilot status: complete**\nVerified by model.");
 
     expect(prompts.at(-1)).toContain("Last verification failure");
     const status = await autopilotTool.execute({ action: "status" }, context);
@@ -644,7 +647,7 @@ describe("Plugin Integration — event handler", () => {
       worktree: "/tmp",
       abort: new AbortController().signal,
       metadata: () => {},
-      ask: async () => {},
+      ask: () => Effect.void,
     };
     const sendWorkerText = async (messageID: string, text: string) => {
       await event({
@@ -682,11 +685,8 @@ describe("Plugin Integration — event handler", () => {
       context,
     );
     await event({ event: { type: "session.idle", properties: { sessionID: "verify-limited" } } });
-    await sendWorkerText("limited-1", '<autopilot status="complete">Candidate done.</autopilot>');
-    await sendWorkerText(
-      "limited-2",
-      '<autopilot status="complete">Verified by model.</autopilot>',
-    );
+    await sendWorkerText("limited-1", "**Autopilot status: complete**\nCandidate done.");
+    await sendWorkerText("limited-2", "**Autopilot status: complete**\nVerified by model.");
 
     expect(prompts).toHaveLength(2);
     const status = await autopilotTool.execute({ action: "status" }, context);
@@ -721,7 +721,7 @@ describe("Plugin Integration — event handler", () => {
       worktree: "/tmp",
       abort: new AbortController().signal,
       metadata: () => {},
-      ask: async () => {},
+      ask: () => Effect.void,
     };
     const sendWorkerText = async (messageID: string, text: string) => {
       await event({
@@ -762,38 +762,37 @@ describe("Plugin Integration — event handler", () => {
     expect(prompts[0]).toContain("Autopilot plan step 1/2");
     expect(prompts[0]).toContain("Current step: Read PLAN.md");
 
-    await sendWorkerText("msg-1", '<autopilot status="complete">Read the plan.</autopilot>');
+    await sendWorkerText("msg-1", "**Autopilot status: complete**\nRead the plan.");
     expect(prompts).toHaveLength(2);
     expect(prompts[1]).toContain("Autopilot plan step 2/2");
     expect(prompts[1]).toContain("Current step: Implement changes");
     const stepStatus = await autopilotTool.execute({ action: "status" }, context);
     expect(stepStatus).toContain("plan=1/2");
 
-    await sendWorkerText("msg-2", '<autopilot status="step-done">Implemented changes.</autopilot>');
+    await sendWorkerText("msg-2", "**Autopilot status: step-done**\nImplemented changes.");
     expect(prompts).toHaveLength(3);
     expect(prompts[2]).toContain("Autopilot VALIDATION checkpoint");
     const validatingStatus = await autopilotTool.execute({ action: "status" }, context);
     expect(validatingStatus).toContain("status=validating");
     expect(validatingStatus).toContain("plan=2/2");
 
-    await sendWorkerText(
-      "msg-3",
-      '<autopilot status="continue">Validation found a fix.</autopilot>',
-    );
+    await sendWorkerText("msg-3", "**Autopilot status: continue**\nValidation found a fix.");
     expect(prompts).toHaveLength(4);
     expect(prompts[3]).toContain("Autopilot continuation");
     expect(prompts[3]).not.toContain("Autopilot plan step 2/2");
     const fixingStatus = await autopilotTool.execute({ action: "status" }, context);
     expect(fixingStatus).toContain("status=waiting_for_reply");
 
-    await sendWorkerText("msg-4", '<autopilot status="complete">Fix applied.</autopilot>');
+    await sendWorkerText("msg-4", "**Autopilot status: complete**\nFix applied.");
     expect(prompts).toHaveLength(5);
     expect(prompts[4]).toContain("Autopilot VALIDATION checkpoint");
 
-    await sendWorkerText("msg-5", '<autopilot status="complete">Verified the plan.</autopilot>');
+    await sendWorkerText("msg-5", "**Autopilot status: complete**\nVerified the plan.");
     const completedStatus = await autopilotTool.execute({ action: "status" }, context);
     expect(completedStatus).toContain("status=completed");
     expect(completedStatus).toContain("stop=COMPLETED");
+    expect(completedStatus).toContain("Final digest:");
+    expect(completedStatus).toContain("Current checkpoint:");
   });
 });
 
@@ -885,7 +884,7 @@ describe("Plugin Integration — system transform", () => {
     if (!prompt) throw new Error("expected system prompt");
     expect(prompt).toContain("Autopilot mode is active");
     expect(prompt).toContain("Follow the active spec workflow.");
-    expect(prompt).toContain('<autopilot status="continue|step-done|validate|complete|blocked">');
+    expect(prompt).toContain("**Autopilot status: continue|step-done|validate|complete|blocked**");
   });
 
   test("skips delegated status prompt for non-worker turns", async () => {
@@ -919,7 +918,7 @@ describe("Plugin Integration — system transform", () => {
     expect(prompt).toContain("Autopilot mode is active");
     expect(prompt).toContain("Follow the active spec workflow.");
     expect(prompt).not.toContain(
-      '<autopilot status="continue|step-done|validate|complete|blocked">',
+      "**Autopilot status: continue|step-done|validate|complete|blocked**",
     );
   });
 
@@ -959,7 +958,7 @@ describe("Plugin Integration — tool.execute.after", () => {
     const env = createTestEnv();
     const output = {
       title: "Status",
-      output: 'Autopilot is running.\n<autopilot status="continue">keep going</autopilot>',
+      output: "Autopilot is running.\n**Autopilot status: continue**\nkeep going",
       metadata: {},
     };
 
@@ -974,12 +973,12 @@ describe("Plugin Integration — tool.execute.after", () => {
     );
 
     expect(output.output).toBe("Autopilot is running.");
-    expect(output.output).not.toContain("<autopilot");
+    expect(output.output).not.toContain("Autopilot status");
   });
 
   test("does not modify output for other tools", async () => {
     const env = createTestEnv();
-    const original = 'Some output\n<autopilot status="continue">keep going</autopilot>';
+    const original = "Some output\n**Autopilot status: continue**\nkeep going";
     const output = {
       title: "Other",
       output: original,

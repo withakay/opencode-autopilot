@@ -13,7 +13,7 @@ export interface AutopilotDirective {
 }
 
 const AUTOPILOT_MARKER_RE =
-  /\n?<autopilot\s+status="(continue|step-done|validate|complete|blocked)">([\s\S]*?)<\/autopilot>\s*$/i;
+  /\n?\*\*Autopilot status:\s*(continue|step-done|validate|complete|blocked)\*\*\s*\n([\s\S]*?)\s*$/i;
 const BLOCKED_HINT_RE =
   /(need (more|additional) information|cannot continue|can't continue|blocked|waiting for user|please provide|which option|what should i|what would you like)/i;
 const ROUTINE_CONFIRMATION_RE =

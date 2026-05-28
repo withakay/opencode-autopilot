@@ -1,5 +1,12 @@
 import type { AutopilotConfig } from "../config/autopilot-config.ts";
-import type { AutonomousStrength, AutopilotRunStatus, PlanStep } from "../types/state.ts";
+import type {
+  AutonomousStrength,
+  AutopilotRunStatus,
+  Checkpoint,
+  GoalContract,
+  PlanStep,
+  VerificationRecord,
+} from "../types/state.ts";
 
 export interface SessionCompactingHookDeps {
   getState: (sessionID: string) =>
@@ -12,6 +19,10 @@ export interface SessionCompactingHookDeps {
         status?: AutopilotRunStatus;
         done_when?: string;
         verify_with?: string;
+        goal_contract?: GoalContract;
+        checkpoints?: Checkpoint[];
+        current_checkpoint?: string;
+        last_verification?: VerificationRecord;
         plan?: PlanStep[];
         active_step_index?: number;
         continuation_count: number;
@@ -57,6 +68,9 @@ export function createSessionCompactingHook(
     const runMode =
       state.run_mode ?? (state.session_mode === "delegated-task" ? "objective" : "ambient");
     const activeStep = state.plan?.[state.active_step_index ?? -1];
+    const activeCheckpoint = state.checkpoints?.find(
+      (checkpoint) => checkpoint.id === state.current_checkpoint,
+    );
     const doneSteps = state.plan?.filter((step) => step.status === "done").length ?? 0;
 
     output.context.push(
@@ -68,6 +82,16 @@ export function createSessionCompactingHook(
         `Objective: ${state.objective || state.goal || "Keep applying session-level autonomy defaults."}`,
         state.done_when ? `Done when: ${state.done_when}` : undefined,
         state.verify_with ? `Verify with: ${state.verify_with}` : undefined,
+        state.goal_contract ? `Goal quality: ${state.goal_contract.quality}` : undefined,
+        state.goal_contract?.criteria.length
+          ? `Acceptance criteria: ${state.goal_contract.criteria.map((criterion) => `${criterion.status}:${criterion.text}`).join("; ")}`
+          : undefined,
+        activeCheckpoint
+          ? `Current checkpoint: ${activeCheckpoint.title} (${activeCheckpoint.status})`
+          : undefined,
+        state.last_verification
+          ? `Last verification: ${state.last_verification.status} - ${state.last_verification.summary}`
+          : undefined,
         state.plan && state.plan.length > 0
           ? `Plan progress: ${doneSteps}/${state.plan.length}`
           : undefined,

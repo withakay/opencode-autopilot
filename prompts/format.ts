@@ -53,6 +53,20 @@ export function summarizeAutopilotState(state: ExtendedState | null | undefined)
     return "Autopilot is idle.";
   }
 
+  const activeCheckpoint = state.checkpoints.find(
+    (checkpoint) => checkpoint.id === state.current_checkpoint,
+  );
+  const completedCheckpoints = state.checkpoints.filter(
+    (checkpoint) => checkpoint.status === "done",
+  ).length;
+  const criterionLines = state.goal_contract.criteria.map((criterion) => {
+    const prefix =
+      criterion.status === "verified" ? "✓" : criterion.status === "unverified" ? "?" : "•";
+    return `${prefix} ${criterion.text}${criterion.evidence ? ` — ${criterion.evidence}` : ""}`;
+  });
+  const requiredSources = state.goal_contract.required_sources;
+  const finalDigest = state.final_digest;
+
   const status = [
     `phase=${state.phase}`,
     `mode=${state.mode}`,
@@ -90,5 +104,47 @@ export function summarizeAutopilotState(state: ExtendedState | null | undefined)
     status.push(`stop=${state.stop_reason}`);
   }
 
-  return `Autopilot status: ${status.join(", ")}`;
+  return [
+    `Autopilot status: ${status.join(", ")}`,
+    "",
+    "## Autopilot Run Card",
+    `Objective: ${state.objective || state.goal || "Session-level autonomy defaults"}`,
+    `Status: ${state.status} (${state.mode})`,
+    `Goal quality: ${state.goal_contract.quality}`,
+    state.goal_contract.stop_condition
+      ? `Stop condition: ${state.goal_contract.stop_condition}`
+      : "Stop condition: not explicit",
+    requiredSources.length > 0 ? `Read-first sources: ${requiredSources.join(", ")}` : undefined,
+    activeCheckpoint
+      ? `Current checkpoint: ${activeCheckpoint.title} (${activeCheckpoint.status})`
+      : state.checkpoints.length > 0
+        ? `Checkpoints: ${completedCheckpoints}/${state.checkpoints.length} complete`
+        : undefined,
+    state.plan.length > 0
+      ? `Plan progress: ${state.plan.filter((step) => step.status === "done").length}/${state.plan.length}`
+      : undefined,
+    criterionLines.length > 0 ? ["Acceptance criteria:", ...criterionLines].join("\n") : undefined,
+    state.last_verification
+      ? `Last verification: ${state.last_verification.status} — ${state.last_verification.summary}`
+      : state.verify_with
+        ? `Last verification: not-run — ${state.verify_with}`
+        : undefined,
+    `Budget: continuation ${state.continuation_count}/${state.max_continues}; agent ${state.worker_agent}`,
+    state.candidate_completion ? `Candidate completion: ${state.candidate_completion}` : undefined,
+    finalDigest
+      ? [
+          "Final digest:",
+          `- status: ${finalDigest.status}`,
+          `- reason: ${finalDigest.reason}`,
+          finalDigest.evidence.length > 0
+            ? `- evidence: ${finalDigest.evidence.join("; ")}`
+            : undefined,
+          finalDigest.next_action ? `- next action: ${finalDigest.next_action}` : undefined,
+        ]
+          .filter((line): line is string => Boolean(line))
+          .join("\n")
+      : undefined,
+  ]
+    .filter((line): line is string => Boolean(line))
+    .join("\n");
 }

@@ -6,6 +6,7 @@ import type {
   ExtendedState,
   PlanStep,
 } from "../types/index.ts";
+import { createGoalContract, createInitialCheckpoint } from "./goal-contract.ts";
 
 export interface CreateInitialStateOptions {
   sessionID?: string;
@@ -42,6 +43,7 @@ export function createInitialState(
       status,
     };
   });
+  const checkpoints = createInitialCheckpoint({ objective: normalizedObjective, plan });
 
   return {
     session_id: sessionID,
@@ -57,6 +59,16 @@ export function createInitialState(
     plan_source: options.planSource,
     planning_framework: options.planningFramework,
     plan,
+    goal_contract: createGoalContract({
+      objective: normalizedObjective,
+      doneWhen: options.doneWhen,
+      verifyWith: options.verifyWith,
+      planSource: options.planSource,
+      planningFramework: options.planningFramework,
+      plan,
+    }),
+    checkpoints,
+    current_checkpoint: checkpoints[0]?.id,
     active_step_index: plan.length > 0 ? 0 : -1,
     stop_reason: null,
     continuation_count: 0,

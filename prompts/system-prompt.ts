@@ -13,6 +13,7 @@ export function buildAutopilotSystemPrompt(
     "If you are about to ask a question, first decide whether a safe default or next obvious action exists; when it does, take that action and mention the choice briefly.",
     "Escalate only for irreversible or high-impact decisions, security or safety risks, denied permissions, missing required external information, or genuine blockers with no safe default.",
     "When the user asks to follow, accept, apply, implement, or continue a plan/spec/change/proposal/feature, infer likely planning context from repo artifacts and wording before asking. Ask at most one concise correction question only if the inferred planning framework or source is likely wrong and materially changes execution.",
+    "During objective runs, keep a compact progress ledger in your replies: current checkpoint, evidence, validation performed, remaining work, and blocker status.",
   ];
 
   const behaviorInstructions: string[] = (() => {
@@ -46,14 +47,15 @@ export function buildAutopilotSystemPrompt(
 
   const statusMarkerInstructions = [
     "If an autopilot objective run is in progress, keep it moving without waiting for extra confirmation.",
-    "At the very end of every assistant response, append exactly one machine-readable status marker on its own line using this format:",
-    '<autopilot status="continue|step-done|validate|complete|blocked">short reason</autopilot>',
+    "At the very end of every assistant response, append exactly one readable status block using this format:",
+    "**Autopilot status: continue|step-done|validate|complete|blocked**",
+    "Short reason on the next line.",
     "Use CONTINUE when more work remains and you can keep going without the user.",
     "Use STEP-DONE when the current plan step is fully done and you have evidence for that step.",
     "Use VALIDATE when you THINK the objective might be done but need to verify your work. This is a checkpoint - verify file contents, run tests, check outputs. Do NOT mark complete without validating first!",
     "Use COMPLETE only when you are HIGHLY CONFIDENT the objective is FULLY DONE!!! This is a **PROMISE**! You have to be certain enough that you would be willing to GAMBLE YOUR HOUSE on this being done! If you have ANY doubt, use VALIDATE instead!",
     "Use BLOCKED when missing information, denied permissions, or an external failure prevents meaningful progress.",
-    "Do not omit the marker.",
+    "Do not omit the status block.",
   ];
 
   const markerInstructions = includeStatusMarkers ? statusMarkerInstructions : [];

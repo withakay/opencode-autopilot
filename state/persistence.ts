@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { ExtendedState } from "../types/index.ts";
+import { ensureGoalContract } from "./goal-contract.ts";
 
 export interface PersistedAutopilotData {
   version: 1;
@@ -14,6 +15,7 @@ function cloneEmpty(): PersistedAutopilotData {
 }
 
 function normalizeState(state: ExtendedState): ExtendedState {
+  ensureGoalContract(state);
   if (
     state.mode === "ENABLED" &&
     state.run_mode === "objective" &&

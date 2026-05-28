@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { Effect } from "effect";
 import { createSessionState } from "../state/factory.ts";
 import { createAutopilotTool } from "../tools/autopilot.ts";
 import { parsePlan } from "../tools/plan.ts";
@@ -15,7 +16,7 @@ function createToolContext(): ToolContext {
     worktree: "/tmp",
     abort: new AbortController().signal,
     metadata: () => {},
-    ask: async () => {},
+    ask: () => Effect.void,
   };
 }
 
@@ -171,6 +172,14 @@ describe("Autopilot Tool", () => {
     expect(state?.objective).toBe("Fix tests without stopping until bun test passes");
     expect(state?.done_when).toBe("bun test passes");
     expect(state?.verify_with).toBe("bun test");
+    expect(state?.goal_contract.quality).toBe("strong");
+    expect(state?.goal_contract.criteria.map((criterion) => criterion.text)).toContain(
+      "bun test passes",
+    );
+    expect(state?.goal_contract.criteria.map((criterion) => criterion.text)).toContain(
+      "Verification command passes: bun test",
+    );
+    expect(state?.checkpoints[0]?.title).toBe("Start objective run");
   });
 
   test("starts a plan-backed objective run", async () => {

@@ -24,7 +24,12 @@ import { createSessionState } from "./state/factory.ts";
 import { createPersistedData, PersistentStateStore } from "./state/persistence.ts";
 import { SessionCache } from "./state/session-cache.ts";
 import { createAutopilotTool } from "./tools/autopilot.ts";
-import type { ExtendedState, StopReason } from "./types/index.ts";
+import type {
+  CheckpointStatus,
+  ExtendedState,
+  StopReason,
+  VerificationRecord,
+} from "./types/index.ts";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -176,6 +181,12 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
     state.stop_reason = stopReason;
     if (stopReason === "COMPLETED") {
       state.status = "completed";
+      for (const criterion of state.goal_contract.criteria) {
+        if (criterion.status === "pending") {
+          criterion.status = "verified";
+          criterion.evidence = detail ?? reason;
+        }
+      }
     } else if (stopReason === "USER_STOP") {
       state.status = "cleared";
     } else if (stopReason === "WAITING_FOR_USER_INPUT" || stopReason === "PERMISSION_DENIED") {
@@ -183,6 +194,29 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
     } else {
       state.status = "failed";
     }
+    state.final_digest = {
+      status:
+        stopReason === "COMPLETED"
+          ? "completed"
+          : state.status === "blocked"
+            ? "blocked"
+            : state.status === "cleared"
+              ? "cleared"
+              : "failed",
+      reason: detail ? `${reason}: ${detail}` : reason,
+      evidence: [
+        ...state.checkpoints.flatMap((checkpoint) => checkpoint.evidence).slice(-6),
+        state.last_verification
+          ? `${state.last_verification.status}: ${state.last_verification.summary}`
+          : undefined,
+      ].filter((item): item is string => Boolean(item)),
+      next_action:
+        state.status === "blocked"
+          ? "Resolve the blocker, then run /autopilot resume."
+          : stopReason === "RETRY_EXHAUSTED"
+            ? "Review the run card, then resume with a higher continuation cap if appropriate."
+            : undefined,
+    };
     recordHistory(sessionID, detail ? `${reason}: ${detail}` : reason);
     await persistState();
 
@@ -235,6 +269,59 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
     if (state.active_step_index < 0) return undefined;
     const step = state.plan[state.active_step_index];
     return step?.status === "in_progress" ? step : undefined;
+  };
+
+  const currentCheckpoint = (state: ExtendedState) =>
+    state.checkpoints.find((checkpoint) => checkpoint.id === state.current_checkpoint);
+
+  const appendCheckpointEvidence = (state: ExtendedState, evidence: string | undefined): void => {
+    const trimmed = evidence?.trim();
+    if (!trimmed) return;
+    const checkpoint = currentCheckpoint(state);
+    if (!checkpoint) return;
+    checkpoint.evidence.push(trimmed);
+    if (checkpoint.evidence.length > 8) checkpoint.evidence = checkpoint.evidence.slice(-8);
+  };
+
+  const finishCheckpoint = (
+    state: ExtendedState,
+    status: CheckpointStatus,
+    evidence?: string,
+  ): void => {
+    const checkpoint = currentCheckpoint(state);
+    if (!checkpoint) return;
+    appendCheckpointEvidence(state, evidence);
+    checkpoint.status = status;
+    checkpoint.completed_at = new Date().toISOString();
+  };
+
+  const startCheckpoint = (state: ExtendedState, title: string, evidence?: string): void => {
+    const active = currentCheckpoint(state);
+    if (active?.status === "active" && active.title === title) {
+      appendCheckpointEvidence(state, evidence);
+      return;
+    }
+
+    const checkpoint = {
+      id: `checkpoint-${state.checkpoints.length + 1}`,
+      title,
+      status: "active" as const,
+      evidence: evidence?.trim() ? [evidence.trim()] : [],
+      started_at: new Date().toISOString(),
+    };
+    state.checkpoints.push(checkpoint);
+    state.current_checkpoint = checkpoint.id;
+  };
+
+  const recordVerification = (state: ExtendedState, verification: VerificationRecord): void => {
+    state.last_verification = verification;
+    const verificationCriterion = state.goal_contract.criteria.find((criterion) =>
+      criterion.text.startsWith("Verification command passes:"),
+    );
+    if (verificationCriterion) {
+      verificationCriterion.status = verification.status === "passed" ? "verified" : "pending";
+      verificationCriterion.evidence = verification.summary;
+    }
   };
 
   const buildNextWorkPrompt = (
@@ -301,6 +388,7 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
     state.status = "validating";
     state.candidate_completion = candidateCompletion;
     state.continuation_count += 1;
+    startCheckpoint(state, "Validation checkpoint", candidateCompletion);
     await safeToast({
       title: "Autopilot validating",
       message: "Verifying objective completion before finalizing",
@@ -326,9 +414,20 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
 
   const runVerification = async (state: ExtendedState): Promise<VerificationResult> => {
     const command = state.verify_with?.trim();
-    if (!command) return { status: "passed" };
+    if (!command) {
+      recordVerification(state, {
+        status: "passed",
+        summary: "No verification command configured.",
+      });
+      return { status: "passed" };
+    }
     const permissionMode = permissionModeBySession.get(state.session_id);
     if (permissionMode !== "allow-all") {
+      recordVerification(state, {
+        command,
+        status: "blocked",
+        summary: `Verification command requires allow-all permission mode: ${command}`,
+      });
       return {
         status: "blocked",
         message: `Verification command requires allow-all permission mode: ${command}`,
@@ -337,6 +436,11 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
 
     const tokens = tokenizeCommand(command);
     if (!tokens) {
+      recordVerification(state, {
+        command,
+        status: "blocked",
+        summary: `Verification command must be a simple command with arguments, not shell syntax: ${command}`,
+      });
       return {
         status: "blocked",
         message: `Verification command must be a simple command with arguments, not shell syntax: ${command}`,
@@ -344,13 +448,25 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
     }
 
     const [file, ...args] = tokens;
-    if (!file) return { status: "blocked", message: "Verification command is empty." };
+    if (!file) {
+      recordVerification(state, {
+        command,
+        status: "blocked",
+        summary: "Verification command is empty.",
+      });
+      return { status: "blocked", message: "Verification command is empty." };
+    }
 
     try {
       await execFileAsync(file, args, {
         cwd: directory || worktree,
         timeout: VERIFY_TIMEOUT_MS,
         maxBuffer: 1024 * 1024,
+      });
+      recordVerification(state, {
+        command,
+        status: "passed",
+        summary: `Verification command passed: ${command}`,
       });
       return { status: "passed" };
     } catch (error) {
@@ -368,6 +484,11 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
         "verification command failed"
       ).trim();
       const firstLine = output.split(/\r?\n/).find(Boolean) ?? output;
+      recordVerification(state, {
+        command,
+        status: "failed",
+        summary: `Verification command failed (${command}): ${firstLine}`,
+      });
       return {
         status: "failed",
         message: `Verification command failed (${command}): ${firstLine}`,
@@ -382,6 +503,8 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
   ): Promise<void> => {
     state.status = "active";
     state.candidate_completion = undefined;
+    finishCheckpoint(state, "failed", failure);
+    startCheckpoint(state, "Repair verification failure", failure);
     recordHistory(sessionID, failure);
 
     if (state.continuation_count >= state.max_continues) {
@@ -430,6 +553,7 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
       state.session_mode === "delegated-task"
     ) {
       recordHistory(sessionID, `Starting objective with ${state.worker_agent}`);
+      appendCheckpointEvidence(state, `Started objective with ${state.worker_agent}.`);
       await safeToast({
         title: "Autopilot armed",
         message: `Starting objective with ${state.worker_agent}`,
@@ -522,6 +646,7 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
 
     const assistantText = sessionCache.getMessageText(sessionID, messageID);
     const directive = inferAutopilotDirective(assistantText, config);
+    appendCheckpointEvidence(state, directive.reason);
 
     const currentStep = activePlanStep(state);
     if (directive.status === "step-done" && !currentStep) {
@@ -538,6 +663,7 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
       const completedStepNumber = state.active_step_index + 1;
       step.status = "done";
       step.evidence = directive.reason;
+      finishCheckpoint(state, "done", directive.reason);
       recordHistory(
         sessionID,
         `Plan step ${completedStepNumber}/${state.plan.length} done: ${directive.reason}`,
@@ -568,6 +694,7 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
 
       state.active_step_index = nextStepIndex;
       nextStep.status = "in_progress";
+      startCheckpoint(state, nextStep.title);
       state.continuation_count += 1;
       await safeToast({
         title: "Autopilot plan step complete",
@@ -587,6 +714,7 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
       const verification = await runVerification(state);
       if (verification.status === "blocked") {
         state.status = "blocked";
+        finishCheckpoint(state, "blocked", verification.message);
         await setStopped(
           sessionID,
           "Verification blocked",
@@ -602,6 +730,7 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
         return;
       }
 
+      finishCheckpoint(state, "done", state.last_verification?.summary ?? directive.reason);
       state.status = "completed";
       await setStopped(sessionID, "Objective completed", directive.reason, "success", "COMPLETED");
       return;
@@ -610,6 +739,7 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
     if (directive.status === "blocked") {
       state.status = "blocked";
       state.candidate_completion = undefined;
+      finishCheckpoint(state, "blocked", directive.reason);
       await setStopped(
         sessionID,
         "Objective blocked",
@@ -642,6 +772,7 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
     state.candidate_completion = undefined;
     state.status = "active";
     state.continuation_count += 1;
+    startCheckpoint(state, `Continuation ${state.continuation_count}`, directive.reason);
     const usageBits = formatUsageMetadata(
       tracking.lastUsage as Parameters<typeof formatUsageMetadata>[0],
     );

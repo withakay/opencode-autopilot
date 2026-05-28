@@ -1,7 +1,7 @@
 {
   "metadata": {
     "version": "3.0.0",
-    "last_run": "2026-05-14T10:13:29.526Z",
+    "last_run": "2026-05-14T10:26:20.362Z",
     "root": "/Users/jack/Code/withakay/opencode-autopilot",
     "include_patterns": [
       "*.ts",
@@ -21,9 +21,9 @@
   "files": {
     "README.md": {
       "path": "README.md",
-      "size": 9829,
-      "mtimeMs": 1777150699429,
-      "hash": "22b3e463be489124b1548e3c242f3f1ac58afa06"
+      "size": 7993,
+      "mtimeMs": 1778754519334,
+      "hash": "a064a5bf50d31194216cd87d566b79152a67107f"
     },
     "__tests__/autopilot-tool.test.ts": {
       "path": "__tests__/autopilot-tool.test.ts",
@@ -261,7 +261,7 @@
     }
   },
   "folder_hashes": {
-    ".": "ce0350a7205893dde48379acfe09b6c3766b9f8a",
+    ".": "48737acfaed92bb6c9556c3ab17997e11d0c2281",
     "__tests__": "50d289bd6e0c9cffdaf730932d829fd27f425958",
     "__tests__/e2e": "d2c02edd0474fa6722bb714a81b78f20eaff1fed",
     "__tests__/e2e/helpers": "3aa7167e4e2bf1abf201c4676caccb6c190a3b55",

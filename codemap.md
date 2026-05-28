@@ -11,6 +11,7 @@ IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning for th
 |entry: `plugin.ts#AutopilotPlugin` -> OpenCode plugin factory; assembles tool + hooks
 |entry: `tools/autopilot.ts#createAutopilotTool` -> control tool API used by `/autopilot` and direct tool calls
 |entry: `.opencode/commands/autopilot.md` -> packaged slash command UX (installed by postinstall, included in npm files)
+|entry: `README.md` -> human-facing install/usage/config/development docs
 |entry: `package.json` scripts -> `build`, `typecheck`, `test`, `lint`, `check`, `postinstall`
 
 ## Design
@@ -46,7 +47,7 @@ IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning for th
 |external surfaces: OpenCode hooks `tool.autopilot`, `permission.ask`, `experimental.chat.system.transform`, `chat.message`, `experimental.session.compacting`, `event`, `tool.execute.after`
 
 ## Gotchas
-|!: source is root-level TypeScript, not `src/`, despite older README file-layout text mentioning `src/`
+|!: README is human-facing; agent-facing slash parsing/prompt rules belong in `.opencode/commands/autopilot.md` and `prompts/`
 |!: `.autopilot/state.json` is local runtime state and ignored; do not commit it
 |!: `.opencode/`, `.ito/`, `.github/`, `.codex/` may be tool-managed; avoid placing generated codemaps there unless explicitly requested
 |!: ambient and objective modes intentionally differ; do not make `/autopilot on` dispatch delegated work

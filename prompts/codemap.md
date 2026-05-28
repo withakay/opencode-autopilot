@@ -13,7 +13,7 @@ IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning for th
 |entry: `normalize.ts#normalizeMaxContinues` -> default/capped continuation limit
 
 ## Design
-|marker: `<autopilot status="continue|step-done|validate|complete|blocked">reason</autopilot>` must appear at assistant-response end for objective runs
+|marker: `**Autopilot status: continue|step-done|validate|complete|blocked**` plus a reason line must appear at assistant-response end for objective runs
 |prompt contract: objective fields include `objective`, optional planning source/framework, `doneWhen`, `verifyWith`
 |planning guidance: broad recognition of Ito/OpenSpec/SpecKit/OpenCode/Codex/Copilot/Claude/Superpower Skills/Total TypeScript/Grill Me/swarm/spec workflows
 |validation: `complete` first triggers validation; validation prompt demands file/test/spec checks before final complete
@@ -28,7 +28,7 @@ IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning for th
 |up: `plugin.ts`, hooks, tool status, tests |down: `config/autopilot-config.ts`, `types/index.ts`
 
 ## Gotchas
-|!: marker regex only matches at end of text; changing this affects hidden marker stripping and directive inference
+|!: marker regex only matches at end of text; changing this affects marker stripping and directive inference
 |!: config directive patterns are escaped literal strings, not regex input
 |!: validation/completion wording is intentionally strong; weakening it can reintroduce premature completion
 |edge: `formatUsageMetadata` expects numeric token/cost fields; unknown SDK shapes are ignored

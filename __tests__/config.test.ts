@@ -17,6 +17,45 @@ async function withTempDir(run: (dir: string) => Promise<void>) {
 }
 
 describe("autopilot config", () => {
+  test("loads .opencode/opencode-autopilot.jsonc with comments", async () => {
+    await withTempDir(async (dir) => {
+      const configDir = join(dir, ".opencode");
+      await mkdir(configDir, { recursive: true });
+      await writeFile(
+        join(configDir, "opencode-autopilot.jsonc"),
+        `{
+          // preferred config location
+          "workflow": {
+            "name": "OpenCodeConfig",
+            "phase": "implement"
+          }
+        }`,
+      );
+
+      const config = await loadAutopilotConfig(dir);
+      expect(config.workflow?.name).toBe("OpenCodeConfig");
+      expect(config.workflow?.phase).toBe("implement");
+    });
+  });
+
+  test("prefers .opencode config over legacy .autopilot config", async () => {
+    await withTempDir(async (dir) => {
+      await mkdir(join(dir, ".opencode"), { recursive: true });
+      await mkdir(join(dir, ".autopilot"), { recursive: true });
+      await writeFile(
+        join(dir, ".opencode", "opencode-autopilot.jsonc"),
+        `{ "workflow": { "name": "preferred" } }`,
+      );
+      await writeFile(
+        join(dir, ".autopilot", "config.jsonc"),
+        `{ "workflow": { "name": "legacy" } }`,
+      );
+
+      const config = await loadAutopilotConfig(dir);
+      expect(config.workflow?.name).toBe("preferred");
+    });
+  });
+
   test("loads .autopilot/config.jsonc with comments", async () => {
     await withTempDir(async (dir) => {
       const configDir = join(dir, ".autopilot");

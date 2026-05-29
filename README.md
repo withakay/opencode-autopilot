@@ -140,10 +140,12 @@ Most users can ignore these and use the default worker agent. They are available
 
 Autopilot reads optional repo-local config from:
 
+- `.opencode/opencode-autopilot.jsonc` (preferred)
+- `.opencode/opencode-autopilot.json`
 - `.autopilot/config.jsonc`
 - `.autopilot/config.json`
 
-If both exist, `config.jsonc` wins. If neither exists, autopilot uses built-in behavior.
+The `.opencode/opencode-autopilot.jsonc` file wins over legacy `.autopilot/config.*` files. If no config exists, autopilot uses built-in behavior.
 
 Example:
 
@@ -187,6 +189,18 @@ Example:
   }
 }
 ```
+
+## Runtime State Storage
+
+Autopilot keeps runtime state out of the repository by default. Objective state, recent history, permission mode, run cards, checkpoints, and final digests are stored under:
+
+```text
+~/.local/share/opencode/opencode-autopilot/projects/<project-key>/state.json
+```
+
+`<project-key>` is a readable project slug plus a stable hash of the repository path, so different repositories do not collide.
+
+Repo-local `.autopilot/state.json` is treated as a legacy fallback: if user-data state does not exist yet, autopilot can still read the old file. New writes go to the user-data location.
 
 Config fields:
 

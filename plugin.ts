@@ -65,7 +65,7 @@ function tokenizeCommand(input: string): string[] | undefined {
 export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) => {
   const root = directory || worktree;
   const config = await loadAutopilotConfig(directory);
-  const stateStore = PersistentStateStore.forRoot(root);
+  const stateStore = await PersistentStateStore.forRoot(root);
 
   // -- Shared state stores (per-session) --
   const stateBySession = new Map<string, ExtendedState>();

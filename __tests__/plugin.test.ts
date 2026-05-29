@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
@@ -508,7 +508,80 @@ describe("Plugin Integration — event handler", () => {
 
   test("persists objective state across plugin instances", async () => {
     await withTempDir(async (dir) => {
-      const createPlugin = async () => {
+      await withTempDir(async (dataHome) => {
+        const previousDataHome = process.env.OPENCODE_AUTOPILOT_DATA_HOME;
+        process.env.OPENCODE_AUTOPILOT_DATA_HOME = dataHome;
+        const createPlugin = async () => {
+          const plugin = await AutopilotPlugin({
+            directory: dir,
+            worktree: dir,
+            client: {
+              tui: { showToast: async () => {} },
+              session: { promptAsync: async () => {} },
+            },
+          } as never);
+          const autopilotTool = plugin.tool?.autopilot;
+          if (!autopilotTool) throw new Error("expected autopilot tool");
+          return autopilotTool;
+        };
+        const context = {
+          sessionID: "persisted-session",
+          messageID: "m1",
+          agent: "pi",
+          directory: dir,
+          worktree: dir,
+          abort: new AbortController().signal,
+          metadata: () => {},
+          ask: () => Effect.void,
+        };
+
+        const firstTool = await createPlugin();
+        await firstTool.execute(
+          {
+            action: "start",
+            objective: "Persist this objective",
+            plan: "1. Do first thing\n2. Do second thing",
+          },
+          context,
+        );
+
+        const secondTool = await createPlugin();
+        const status = await secondTool.execute({ action: "status" }, context);
+
+        expect(status).toContain("Persist this objective");
+        expect(status).toContain("plan=0/2");
+        if (previousDataHome === undefined) {
+          delete process.env.OPENCODE_AUTOPILOT_DATA_HOME;
+        } else {
+          process.env.OPENCODE_AUTOPILOT_DATA_HOME = previousDataHome;
+        }
+      });
+    });
+  });
+
+  test("loads legacy repo-local state when user-data state is absent", async () => {
+    await withTempDir(async (dir) => {
+      await withTempDir(async (dataHome) => {
+        const previousDataHome = process.env.OPENCODE_AUTOPILOT_DATA_HOME;
+        process.env.OPENCODE_AUTOPILOT_DATA_HOME = dataHome;
+        const legacyDir = join(dir, ".autopilot");
+        await mkdir(legacyDir, { recursive: true });
+        await writeFile(
+          join(legacyDir, "state.json"),
+          `${JSON.stringify(
+            {
+              version: 1,
+              states: {
+                "legacy-session": createSessionState("legacy-session", "Legacy state objective"),
+              },
+              history: { "legacy-session": ["legacy event"] },
+              permissionMode: { "legacy-session": "limited" },
+            },
+            null,
+            2,
+          )}\n`,
+        );
+
         const plugin = await AutopilotPlugin({
           directory: dir,
           worktree: dir,
@@ -519,34 +592,27 @@ describe("Plugin Integration — event handler", () => {
         } as never);
         const autopilotTool = plugin.tool?.autopilot;
         if (!autopilotTool) throw new Error("expected autopilot tool");
-        return autopilotTool;
-      };
-      const context = {
-        sessionID: "persisted-session",
-        messageID: "m1",
-        agent: "pi",
-        directory: dir,
-        worktree: dir,
-        abort: new AbortController().signal,
-        metadata: () => {},
-        ask: () => Effect.void,
-      };
 
-      const firstTool = await createPlugin();
-      await firstTool.execute(
-        {
-          action: "start",
-          objective: "Persist this objective",
-          plan: "1. Do first thing\n2. Do second thing",
-        },
-        context,
-      );
+        const context = {
+          sessionID: "legacy-session",
+          messageID: "m1",
+          agent: "pi",
+          directory: dir,
+          worktree: dir,
+          abort: new AbortController().signal,
+          metadata: () => {},
+          ask: () => Effect.void,
+        };
+        const status = await autopilotTool.execute({ action: "status" }, context);
+        expect(status).toContain("Legacy state objective");
+        expect(status).toContain("legacy event");
 
-      const secondTool = await createPlugin();
-      const status = await secondTool.execute({ action: "status" }, context);
-
-      expect(status).toContain("Persist this objective");
-      expect(status).toContain("plan=0/2");
+        if (previousDataHome === undefined) {
+          delete process.env.OPENCODE_AUTOPILOT_DATA_HOME;
+        } else {
+          process.env.OPENCODE_AUTOPILOT_DATA_HOME = previousDataHome;
+        }
+      });
     });
   });
 

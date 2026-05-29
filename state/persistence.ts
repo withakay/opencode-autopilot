@@ -1,7 +1,16 @@
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { createHash } from "node:crypto";
+import { mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { basename, dirname, join } from "node:path";
 import type { ExtendedState } from "../types/index.ts";
 import { ensureGoalContract } from "./goal-contract.ts";
+
+export function getAutopilotDataHome(): string {
+  return (
+    process.env.OPENCODE_AUTOPILOT_DATA_HOME ??
+    join(homedir(), ".local", "share", "opencode", "opencode-autopilot")
+  );
+}
 
 export interface PersistedAutopilotData {
   version: 1;
@@ -29,15 +38,38 @@ function normalizeState(state: ExtendedState): ExtendedState {
 export class PersistentStateStore {
   private queue = Promise.resolve();
 
-  constructor(private readonly filePath: string) {}
+  constructor(
+    private readonly filePath: string,
+    private readonly legacyFilePath?: string,
+  ) {}
 
-  static forRoot(root: string): PersistentStateStore {
-    return new PersistentStateStore(join(root, ".autopilot", "state.json"));
+  static async forRoot(root: string): Promise<PersistentStateStore> {
+    const canonicalRoot = await canonicalizeRoot(root);
+    const projectKey = createProjectKey(canonicalRoot);
+    const filePath = join(getAutopilotDataHome(), "projects", projectKey, "state.json");
+    const legacyFilePath = join(root, ".autopilot", "state.json");
+    return new PersistentStateStore(filePath, legacyFilePath);
+  }
+
+  get path(): string {
+    return this.filePath;
   }
 
   async load(): Promise<PersistedAutopilotData> {
+    const primary = await this.loadFrom(this.filePath);
+    if (primary) return primary;
+
+    if (this.legacyFilePath) {
+      const legacy = await this.loadFrom(this.legacyFilePath);
+      if (legacy) return legacy;
+    }
+
+    return cloneEmpty();
+  }
+
+  private async loadFrom(filePath: string): Promise<PersistedAutopilotData | null> {
     try {
-      const raw = await readFile(this.filePath, "utf8");
+      const raw = await readFile(filePath, "utf8");
       const parsed = JSON.parse(raw) as Partial<PersistedAutopilotData>;
       if (parsed.version !== 1 || !parsed.states) return cloneEmpty();
 
@@ -49,7 +81,7 @@ export class PersistentStateStore {
       data.permissionMode = parsed.permissionMode ?? {};
       return data;
     } catch (error) {
-      if ((error as { code?: string }).code === "ENOENT") return cloneEmpty();
+      if ((error as { code?: string }).code === "ENOENT") return null;
       throw error;
     }
   }
@@ -78,6 +110,29 @@ export class PersistentStateStore {
     );
     return run;
   }
+}
+
+async function canonicalizeRoot(root: string): Promise<string> {
+  try {
+    return await realpath(root);
+  } catch {
+    return root;
+  }
+}
+
+function slugPart(root: string): string {
+  return (
+    basename(root)
+      .toLowerCase()
+      .replace(/[^a-z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 48) || "project"
+  );
+}
+
+export function createProjectKey(root: string): string {
+  const digest = createHash("sha256").update(root).digest("hex").slice(0, 16);
+  return `${slugPart(root)}-${digest}`;
 }
 
 export function createPersistedData(

@@ -29,7 +29,12 @@ export interface AutopilotConfig {
   workflow?: AutopilotWorkflowConfig;
 }
 
-const CONFIG_CANDIDATES = ["config.jsonc", "config.json"] as const;
+const CONFIG_CANDIDATES = [
+  [".opencode", "opencode-autopilot.jsonc"],
+  [".opencode", "opencode-autopilot.json"],
+  [".autopilot", "config.jsonc"],
+  [".autopilot", "config.json"],
+] as const;
 
 function stripJsonComments(input: string): string {
   return input.replace(/^\s*\/\/.*$/gm, "").replace(/\/\*[\s\S]*?\*\//g, "");
@@ -92,17 +97,15 @@ function normalizeConfig(raw: unknown): AutopilotConfig {
 }
 
 export async function loadAutopilotConfig(directory: string): Promise<AutopilotConfig> {
-  const configDir = join(directory, ".autopilot");
-
   for (const candidate of CONFIG_CANDIDATES) {
-    const filePath = join(configDir, candidate);
+    const filePath = join(directory, ...candidate);
     if (!existsSync(filePath)) {
       continue;
     }
 
     try {
       const raw = await readFile(filePath, "utf-8");
-      const parsed = JSON.parse(candidate.endsWith("jsonc") ? stripJsonComments(raw) : raw);
+      const parsed = JSON.parse(candidate[1].endsWith("jsonc") ? stripJsonComments(raw) : raw);
       return normalizeConfig(parsed);
     } catch {
       return {};

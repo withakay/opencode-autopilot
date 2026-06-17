@@ -1,4 +1,6 @@
-.PHONY: check build test lint format clean publish install help
+BUMP ?= patch
+
+.PHONY: check build test lint format clean publish install bump-version help
 
 help:
 	@echo "Available targets:"
@@ -9,6 +11,7 @@ help:
 	@echo "  make lint       - Run Biome linter"
 	@echo "  make format     - Format code with Biome"
 	@echo "  make clean      - Remove build artifacts"
+	@echo "  make bump-version [BUMP=patch|minor|major|x.y.z] - Bump package version without tagging"
 	@echo "  make publish    - Publish to npm"
 
 install:
@@ -34,5 +37,8 @@ test:
 clean:
 	rm -rf dist
 
+bump-version:
+	npm version $(BUMP) --no-git-tag-version
+
 publish: clean build test
-	bun publish
+	npm publish

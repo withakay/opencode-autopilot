@@ -45,6 +45,10 @@ interface SessionCompactingOutput {
   prompt?: string;
 }
 
+function escapePromptBlockText(text: string): string {
+  return String(text).replaceAll("</", "<\\/");
+}
+
 export function createSessionCompactingHook(
   deps: SessionCompactingHookDeps,
 ): (input: SessionCompactingInput, output: SessionCompactingOutput) => Promise<void> {
@@ -79,7 +83,12 @@ export function createSessionCompactingHook(
         `Autopilot is ENABLED in ${state.session_mode} mode with ${state.autonomous_strength} autonomy.`,
         `Run mode: ${runMode}`,
         `Status: ${state.status ?? "active"}`,
-        `Objective: ${state.objective || state.goal || "Keep applying session-level autonomy defaults."}`,
+        "Objective block:",
+        "<autopilot_objective>",
+        escapePromptBlockText(
+          state.objective || state.goal || "Keep applying session-level autonomy defaults.",
+        ),
+        "</autopilot_objective>",
         state.done_when ? `Done when: ${state.done_when}` : undefined,
         state.verify_with ? `Verify with: ${state.verify_with}` : undefined,
         state.goal_contract ? `Goal quality: ${state.goal_contract.quality}` : undefined,

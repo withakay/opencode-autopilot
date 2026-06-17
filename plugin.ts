@@ -17,6 +17,7 @@ import {
   formatUsageMetadata,
   inferAutopilotDirective,
   normalizeMaxContinues,
+  normalizePositiveInteger,
   stripAutopilotMarker,
   summarizeAutopilotState,
 } from "./prompts/index.ts";
@@ -73,16 +74,48 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
   const historyBySession = new Map<string, string[]>();
   const permissionModeBySession = new Map<string, "allow-all" | "limited">();
   const pendingAgentBySession = new Map<string, string | undefined>();
+  const activeContinues = new Set<string>();
   const sessionCache = new SessionCache();
+  const recoveredSessionIDs = new Set<string>();
+  let loadedStateChanged = false;
 
   try {
     const persisted = await stateStore.load();
     for (const [sessionID, state] of Object.entries(persisted.states)) {
+      if (
+        state.mode === "ENABLED" &&
+        state.run_mode === "objective" &&
+        ["active", "waiting_for_reply", "validating"].includes(state.status)
+      ) {
+        state.mode = "DISABLED";
+        state.phase = "STOPPED";
+        state.status = "paused";
+        state.stop_reason = "RECOVERED_AFTER_RESTART";
+        state.final_digest = {
+          status: "blocked",
+          reason:
+            "Recovered after plugin restart; autonomous continuation is paused to avoid replaying work.",
+          evidence: state.checkpoints.flatMap((checkpoint) => checkpoint.evidence).slice(-6),
+          next_action: "Review /autopilot status, then run /autopilot resume when ready.",
+        };
+        recoveredSessionIDs.add(sessionID);
+        loadedStateChanged = true;
+      }
       stateBySession.set(sessionID, state);
       trackingBySession.set(sessionID, createSessionTracking());
     }
     for (const [sessionID, history] of Object.entries(persisted.history)) {
-      historyBySession.set(sessionID, history.slice(-MAX_HISTORY_ENTRIES));
+      const recoveredNote = recoveredSessionIDs.has(sessionID)
+        ? ["Recovered after plugin restart; paused objective until /autopilot resume."]
+        : [];
+      historyBySession.set(sessionID, [...history, ...recoveredNote].slice(-MAX_HISTORY_ENTRIES));
+    }
+    for (const sessionID of recoveredSessionIDs) {
+      if (!historyBySession.has(sessionID)) {
+        historyBySession.set(sessionID, [
+          "Recovered after plugin restart; paused objective until /autopilot resume.",
+        ]);
+      }
     }
     for (const [sessionID, mode] of Object.entries(persisted.permissionMode)) {
       permissionModeBySession.set(sessionID, mode);
@@ -104,6 +137,10 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
       // Keep autopilot responsive even if local persistence fails.
     }
   };
+
+  if (loadedStateChanged) {
+    void persistState();
+  }
 
   // -- State accessors --
   const getState = (sessionID: string): ExtendedState | undefined => stateBySession.get(sessionID);
@@ -189,6 +226,8 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
       }
     } else if (stopReason === "USER_STOP") {
       state.status = "cleared";
+    } else if (stopReason === "NO_PROGRESS") {
+      state.status = "paused";
     } else if (stopReason === "WAITING_FOR_USER_INPUT" || stopReason === "PERMISSION_DENIED") {
       state.status = "blocked";
     } else {
@@ -200,9 +239,11 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
           ? "completed"
           : state.status === "blocked"
             ? "blocked"
-            : state.status === "cleared"
-              ? "cleared"
-              : "failed",
+            : state.status === "paused"
+              ? "blocked"
+              : state.status === "cleared"
+                ? "cleared"
+                : "failed",
       reason: detail ? `${reason}: ${detail}` : reason,
       evidence: [
         ...state.checkpoints.flatMap((checkpoint) => checkpoint.evidence).slice(-6),
@@ -213,9 +254,11 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
       next_action:
         state.status === "blocked"
           ? "Resolve the blocker, then run /autopilot resume."
-          : stopReason === "RETRY_EXHAUSTED"
-            ? "Review the run card, then resume with a higher continuation cap if appropriate."
-            : undefined,
+          : state.status === "paused"
+            ? "Review the run card, then run /autopilot resume if the objective still has a safe next action."
+            : stopReason === "RETRY_EXHAUSTED"
+              ? "Review the run card, then resume with a higher continuation cap if appropriate."
+              : undefined,
     };
     recordHistory(sessionID, detail ? `${reason}: ${detail}` : reason);
     await persistState();
@@ -239,6 +282,7 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
 
     tracking.awaitingWorkerReply = true;
     tracking.lastAssistantMessageID = undefined;
+    tracking.lastOutputTokens = undefined;
     if (state.status !== "validating") {
       state.status = "waiting_for_reply";
     }
@@ -322,6 +366,69 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
       verificationCriterion.status = verification.status === "passed" ? "verified" : "pending";
       verificationCriterion.evidence = verification.summary;
     }
+  };
+
+  const budgetStopMessage = (state: ExtendedState): string | undefined => {
+    const elapsedMs = Date.now() - state.started_at;
+    if (elapsedMs >= state.max_duration_ms) {
+      return `Max duration reached (${Math.round(elapsedMs / 1000)}s/${Math.round(state.max_duration_ms / 1000)}s).`;
+    }
+
+    if (state.total_tokens >= state.max_tokens) {
+      return `Max tracked tokens reached (${state.total_tokens.toLocaleString()}/${state.max_tokens.toLocaleString()}).`;
+    }
+
+    return undefined;
+  };
+
+  const stopIfBudgetExceeded = async (
+    sessionID: string,
+    state: ExtendedState,
+  ): Promise<boolean> => {
+    const message = budgetStopMessage(state);
+    if (!message) return false;
+
+    await setStopped(sessionID, "Budget exhausted", message, "warning", "BUDGET_EXHAUSTED");
+    return true;
+  };
+
+  const updateNoProgressState = async (
+    sessionID: string,
+    state: ExtendedState,
+    outputTokens: number | undefined,
+    assistantText: string,
+    directiveStatus: string,
+  ): Promise<boolean> => {
+    if (directiveStatus !== "continue") {
+      state.no_progress_turns = 0;
+      return false;
+    }
+
+    const lowOutput =
+      outputTokens !== undefined && outputTokens < state.no_progress_token_threshold;
+    if (!lowOutput && assistantText.trim()) {
+      state.no_progress_turns = 0;
+      return false;
+    }
+
+    state.no_progress_turns += 1;
+    recordHistory(
+      sessionID,
+      `Low-progress worker turn ${state.no_progress_turns}/${state.no_progress_turns_before_pause}.`,
+    );
+
+    if (state.no_progress_turns < state.no_progress_turns_before_pause) {
+      return false;
+    }
+
+    await setStopped(
+      sessionID,
+      "No progress detected",
+      `Paused after ${state.no_progress_turns} low-progress worker turn(s).`,
+      "warning",
+      "NO_PROGRESS",
+    );
+    return true;
   };
 
   const buildNextWorkPrompt = (
@@ -543,6 +650,7 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
     if (!state || state.mode !== "ENABLED" || !tracking) return;
     if (state.run_mode !== "objective") return;
     if (!["active", "validating", "waiting_for_reply"].includes(state.status)) return;
+    if (await stopIfBudgetExceeded(sessionID, state)) return;
 
     // Initial dispatch after arming
     if (
@@ -620,6 +728,7 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
         );
         return;
       }
+      if (await stopIfBudgetExceeded(sessionID, state)) return;
 
       state.continuation_count += 1;
       recordHistory(
@@ -647,6 +756,18 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
     const assistantText = sessionCache.getMessageText(sessionID, messageID);
     const directive = inferAutopilotDirective(assistantText, config);
     appendCheckpointEvidence(state, directive.reason);
+    if (await stopIfBudgetExceeded(sessionID, state)) return;
+    if (
+      await updateNoProgressState(
+        sessionID,
+        state,
+        tracking.lastOutputTokens,
+        assistantText,
+        directive.status,
+      )
+    ) {
+      return;
+    }
 
     const currentStep = activePlanStep(state);
     if (directive.status === "step-done" && !currentStep) {
@@ -767,6 +888,7 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
       );
       return;
     }
+    if (await stopIfBudgetExceeded(sessionID, state)) return;
 
     // Continue
     state.candidate_completion = undefined;
@@ -797,7 +919,15 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
     deleteState,
     sessionCache,
     getTracking,
-    onSessionIdle: maybeContinue,
+    onSessionIdle: async (sessionID) => {
+      if (activeContinues.has(sessionID)) return;
+      activeContinues.add(sessionID);
+      try {
+        await maybeContinue(sessionID);
+      } finally {
+        activeContinues.delete(sessionID);
+      }
+    },
     onSessionError: async (sessionID, error) => {
       const errorMessage = error?.data?.message ?? "Autopilot encountered an unknown error.";
       const isAbort = error?.name === "MessageAbortedError";
@@ -874,6 +1004,7 @@ export const AutopilotPlugin: Plugin = async ({ client, directory, worktree }) =
     setState,
     createSessionState,
     normalizeMaxContinues,
+    normalizePositiveInteger,
     initSession,
     summarizeState: summarizeAutopilotState,
     getHistory: (sessionID) => historyBySession.get(sessionID) ?? [],

@@ -17,6 +17,9 @@ Additional parsing rules:
 - If the user includes `allow-all` or `allow all`, set `permissionMode` to `allow-all`
 - If the user includes `limited`, set `permissionMode` to `limited`
 - If the user includes a continuation cap such as `max 3`, `max=3`, or `continue 3 times`, pass it as `maxContinues`
+- If the user includes a duration cap such as `15 minutes`, `max 15m`, or `duration 900000ms`, pass it as `maxDurationMs` in milliseconds
+- If the user includes a token cap such as `max tokens 100000` or `token budget 100k`, pass it as `maxTokens`
+- If the user includes stall/no-progress settings, pass them as `noProgressTokenThreshold` and/or `noProgressTurns`
 - If the user includes `agent <name>`, `use <name>`, or `agent=<name>`, pass it as `workerAgent`
 - Do not ask the user to choose autonomous strength. Autopilot objective runs should default to strong autonomy; only pass `autonomousStrength` if the user explicitly asks for a lower-supervision mode.
 - If the user phrases a stopping condition such as `until ...` or `without stopping until ...`, include the full objective text; if there is a distinct verification command, pass it as `verifyWith`

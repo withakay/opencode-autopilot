@@ -8,6 +8,9 @@ import type { ExtendedState } from "../types/index.ts";
 export interface SessionTracking {
   lastAssistantMessageID: string | undefined;
   lastUsage: { tokens?: unknown; cost?: unknown } | undefined;
+  lastOutputTokens: number | undefined;
+  seenTokenTotals: Map<string, number>;
+  seenOutputTokens: Map<string, number>;
   awaitingWorkerReply: boolean;
   blockedByPermission: boolean;
   permissionBlockMessage: string | undefined;
@@ -17,6 +20,9 @@ export function createSessionTracking(): SessionTracking {
   return {
     lastAssistantMessageID: undefined,
     lastUsage: undefined,
+    lastOutputTokens: undefined,
+    seenTokenTotals: new Map<string, number>(),
+    seenOutputTokens: new Map<string, number>(),
     awaitingWorkerReply: false,
     blockedByPermission: false,
     permissionBlockMessage: undefined,
@@ -69,6 +75,31 @@ function normalizeError(
   return result;
 }
 
+function toNonNegativeInteger(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+function messageTokens(info: Record<string, unknown>): Record<string, unknown> {
+  return isObject(info.tokens) ? info.tokens : {};
+}
+
+function totalTokens(info: Record<string, unknown>): number {
+  const tokens = messageTokens(info);
+  const explicitTotal = toNonNegativeInteger(tokens.total);
+  if (explicitTotal > 0) return explicitTotal;
+
+  return (
+    toNonNegativeInteger(tokens.input) +
+    toNonNegativeInteger(tokens.output) +
+    toNonNegativeInteger(tokens.reasoning)
+  );
+}
+
+function outputTokens(info: Record<string, unknown>): number {
+  return toNonNegativeInteger(messageTokens(info).output);
+}
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -115,6 +146,20 @@ export function createEventHandler(
             const agent = "agent" in info && isString(info.agent) ? info.agent : undefined;
 
             if (agent === state.worker_agent) {
+              const previousTotal = tracking.seenTokenTotals.get(messageID) ?? 0;
+              const currentTotal = totalTokens(info);
+              if (currentTotal > previousTotal) {
+                state.total_tokens += currentTotal - previousTotal;
+                tracking.seenTokenTotals.set(messageID, currentTotal);
+              }
+
+              const previousOutput = tracking.seenOutputTokens.get(messageID) ?? 0;
+              const currentOutput = outputTokens(info);
+              if (currentOutput > previousOutput) {
+                tracking.seenOutputTokens.set(messageID, currentOutput);
+                tracking.lastOutputTokens = currentOutput;
+              }
+
               tracking.lastAssistantMessageID = messageID;
               tracking.lastUsage = {
                 tokens: info.tokens,

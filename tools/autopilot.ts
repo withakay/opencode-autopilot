@@ -12,6 +12,10 @@ export interface AutopilotToolDeps {
     objective: string,
     options: {
       maxContinues?: number;
+      maxDurationMs?: number;
+      maxTokens?: number;
+      noProgressTokenThreshold?: number;
+      noProgressTurnsBeforePause?: number;
       sessionMode?: ExtendedState["session_mode"];
       workerAgent?: string;
       autonomousStrength?: AutonomousStrength;
@@ -23,6 +27,7 @@ export interface AutopilotToolDeps {
     },
   ) => ExtendedState;
   normalizeMaxContinues: (value: unknown) => number;
+  normalizePositiveInteger?: (value: unknown, fallback: number) => number;
   initSession: (sessionID: string) => void;
   onArmed: (
     sessionID: string,
@@ -86,6 +91,30 @@ export function createAutopilotTool(deps: AutopilotToolDeps) {
         .positive()
         .optional()
         .describe("Maximum number of autonomous continuation prompts"),
+      maxDurationMs: tool.schema
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("Maximum objective run duration in milliseconds"),
+      maxTokens: tool.schema
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("Maximum tracked worker message tokens before stopping"),
+      noProgressTokenThreshold: tool.schema
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("Worker output tokens below this threshold count as low-progress"),
+      noProgressTurns: tool.schema
+        .number()
+        .int()
+        .positive()
+        .optional()
+        .describe("Low-progress worker turns before pausing the objective"),
       workerAgent: tool.schema
         .string()
         .optional()
@@ -165,6 +194,7 @@ export function createAutopilotTool(deps: AutopilotToolDeps) {
         state.phase = "OBSERVE";
         state.status = "active";
         state.stop_reason = null;
+        state.final_digest = undefined;
         deps.initSession(context.sessionID);
         await deps.onResumed?.(context.sessionID, state, args.permissionMode);
         await deps.onStateChanged?.(context.sessionID, state);
@@ -185,6 +215,12 @@ export function createAutopilotTool(deps: AutopilotToolDeps) {
 
       const permissionMode = args.permissionMode ?? "limited";
       const maxContinues = deps.normalizeMaxContinues(args.maxContinues);
+      const normalizePositiveInteger =
+        deps.normalizePositiveInteger ?? ((_value, fallback) => fallback);
+      const maxDurationMs = normalizePositiveInteger(args.maxDurationMs, 15 * 60 * 1000);
+      const maxTokens = normalizePositiveInteger(args.maxTokens, 200000);
+      const noProgressTokenThreshold = normalizePositiveInteger(args.noProgressTokenThreshold, 50);
+      const noProgressTurnsBeforePause = normalizePositiveInteger(args.noProgressTurns, 2);
       const workerAgent =
         args.workerAgent?.trim() || deps.defaultWorkerAgent || AUTOPILOT_FALLBACK_AGENT;
       const autonomousStrength = args.autonomousStrength ?? "balanced";
@@ -214,6 +250,10 @@ export function createAutopilotTool(deps: AutopilotToolDeps) {
         startsObjectiveRun ? objective : "",
         {
           maxContinues,
+          maxDurationMs,
+          maxTokens,
+          noProgressTokenThreshold,
+          noProgressTurnsBeforePause,
           workerAgent,
           autonomousStrength: effectiveStrength,
           sessionMode: startsObjectiveRun ? "delegated-task" : "session-defaults",
@@ -234,6 +274,10 @@ export function createAutopilotTool(deps: AutopilotToolDeps) {
           action,
           permissionMode,
           maxContinues,
+          maxDurationMs,
+          maxTokens,
+          noProgressTokenThreshold,
+          noProgressTurnsBeforePause,
           workerAgent,
           autonomousStrength: effectiveStrength,
           objective: startsObjectiveRun ? objective : null,

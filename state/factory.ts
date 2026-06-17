@@ -1,3 +1,9 @@
+import {
+  AUTOPILOT_DEFAULT_MAX_DURATION_MS,
+  AUTOPILOT_DEFAULT_MAX_TOKENS,
+  AUTOPILOT_DEFAULT_NO_PROGRESS_TOKEN_THRESHOLD,
+  AUTOPILOT_DEFAULT_NO_PROGRESS_TURNS,
+} from "../prompts/index.ts";
 import type {
   AgentMode,
   AgentPhase,
@@ -14,6 +20,10 @@ export interface CreateInitialStateOptions {
   phase?: AgentPhase;
   sessionMode?: ExtendedState["session_mode"];
   maxContinues?: number;
+  maxDurationMs?: number;
+  maxTokens?: number;
+  noProgressTokenThreshold?: number;
+  noProgressTurnsBeforePause?: number;
   workerAgent?: string;
   autonomousStrength?: AutonomousStrength;
   doneWhen?: string;
@@ -71,8 +81,17 @@ export function createInitialState(
     current_checkpoint: checkpoints[0]?.id,
     active_step_index: plan.length > 0 ? 0 : -1,
     stop_reason: null,
+    started_at: Date.now(),
     continuation_count: 0,
     max_continues: options.maxContinues ?? DEFAULT_MAX_CONTINUES,
+    total_tokens: 0,
+    max_tokens: options.maxTokens ?? AUTOPILOT_DEFAULT_MAX_TOKENS,
+    max_duration_ms: options.maxDurationMs ?? AUTOPILOT_DEFAULT_MAX_DURATION_MS,
+    no_progress_token_threshold:
+      options.noProgressTokenThreshold ?? AUTOPILOT_DEFAULT_NO_PROGRESS_TOKEN_THRESHOLD,
+    no_progress_turns_before_pause:
+      options.noProgressTurnsBeforePause ?? AUTOPILOT_DEFAULT_NO_PROGRESS_TURNS,
+    no_progress_turns: 0,
     worker_agent: options.workerAgent ?? DEFAULT_WORKER_AGENT,
     autonomous_strength: options.autonomousStrength ?? DEFAULT_AUTONOMOUS_STRENGTH,
   };

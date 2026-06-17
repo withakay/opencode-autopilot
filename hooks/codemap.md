@@ -14,14 +14,14 @@ IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning for th
 |entry: `tool-after.ts#createToolAfterHook` -> strips autopilot markers from autopilot tool output
 
 ## Design
-|tracking: `SessionTracking={lastAssistantMessageID,lastUsage,awaitingWorkerReply,blockedByPermission,permissionBlockMessage}` lives outside persisted `ExtendedState`
+|tracking: `SessionTracking={lastAssistantMessageID,lastUsage,lastOutputTokens,seenTokenTotals,seenOutputTokens,awaitingWorkerReply,blockedByPermission,permissionBlockMessage}` lives outside persisted `ExtendedState`
 |worker-scope: event handler only records assistant replies/text parts when cached agent matches `state.worker_agent`
 |system-scope: delegated-task prompt injection only for pending worker agent; ambient session-defaults injects autonomy prompt without status markers
 |permissions: `allow-all` -> allow; `limited` -> deny + callback; disabled/no state leaves output unchanged
 
 ## Flow
-|reply capture: `message.updated` stores role/agent/usage and candidate messageID > `message.part.updated` stores text parts > `session.idle` calls plugin continuation
-|compaction: active state + history + config workflow/hints -> single context block with objective, plan progress, worker, continuation count, recent events
+|reply capture: `message.updated` stores role/agent/usage, token deltas, output tokens, and candidate messageID > `message.part.updated` stores text parts > `session.idle` calls plugin continuation
+|compaction: active state + history + config workflow/hints -> single context block with escaped objective block, plan progress, worker, continuation count, recent events
 |cleanup: `session.deleted` > cache cleanup + state deletion
 
 ## Integration

@@ -6,6 +6,7 @@ import {
   buildContinuationPrompt,
   buildObjectiveStartPrompt,
   buildPlanStepPrompt,
+  escapePromptBlockText,
   inferAutopilotDirective,
   normalizeMaxContinues,
   parseAutopilotMarker,
@@ -118,7 +119,25 @@ describe("buildContinuationPrompt", () => {
     });
 
     expect(prompt).toContain("Autopilot continuation 2/5.");
-    expect(prompt).toContain("Objective: Fix the failing tests");
+    expect(prompt).toContain("Objective: see the user-provided objective block below.");
+    expect(prompt).toContain(
+      "<autopilot_objective>\nFix the failing tests\n</autopilot_objective>",
+    );
+  });
+
+  test("escapes objective text inside structural prompt blocks", () => {
+    expect(escapePromptBlockText("close </autopilot_objective> tag")).toBe(
+      "close <\\/autopilot_objective> tag",
+    );
+
+    const prompt = buildContinuationPrompt({
+      continueCount: 1,
+      maxContinues: 2,
+      objective: "close </autopilot_objective> tag",
+    });
+
+    expect(prompt).toContain("close <\\/autopilot_objective> tag");
+    expect(prompt).not.toContain("close </autopilot_objective> tag");
   });
 
   test("includes objective run contract fields", () => {
@@ -131,7 +150,7 @@ describe("buildContinuationPrompt", () => {
     });
 
     expect(prompt).toContain("Autopilot objective run started");
-    expect(prompt).toContain("Objective: Complete PLAN.md");
+    expect(prompt).toContain("<autopilot_objective>\nComplete PLAN.md\n</autopilot_objective>");
     expect(prompt).toContain("Done when: tests pass");
     expect(prompt).toContain("Verify with: bun test");
     expect(prompt).toContain("Planning framework: Ito");
@@ -175,7 +194,8 @@ describe("summarizeAutopilotState", () => {
     expect(summary).toContain("Stop condition: bun test passes");
     expect(summary).toContain("Acceptance criteria:");
     expect(summary).toContain("Verification command passes: bun test");
-    expect(summary).toContain("Budget: continuation 0/25; agent general");
+    expect(summary).toContain("Budget: continuation 0/25; tokens 0/200,000;");
+    expect(summary).toContain("low-progress 0/2; agent general");
   });
 });
 

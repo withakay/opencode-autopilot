@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Effect } from "effect";
@@ -14,6 +14,7 @@ import { createToolAfterHook } from "../hooks/tool-after.ts";
 import { AutopilotPlugin } from "../plugin.ts";
 import { buildAutopilotSystemPrompt, stripAutopilotMarker } from "../prompts/index.ts";
 import { createSessionState } from "../state/factory.ts";
+import { createPersistedData, PersistentStateStore } from "../state/persistence.ts";
 import { SessionCache } from "../state/session-cache.ts";
 import type { ExtendedState } from "../types/index.ts";
 
@@ -549,7 +550,71 @@ describe("Plugin Integration — event handler", () => {
         const status = await secondTool.execute({ action: "status" }, context);
 
         expect(status).toContain("Persist this objective");
+        expect(status).toContain("status=paused");
+        expect(status).toContain("stop=RECOVERED_AFTER_RESTART");
         expect(status).toContain("plan=0/2");
+        if (previousDataHome === undefined) {
+          delete process.env.OPENCODE_AUTOPILOT_DATA_HOME;
+        } else {
+          process.env.OPENCODE_AUTOPILOT_DATA_HOME = previousDataHome;
+        }
+      });
+    });
+  });
+
+  test("recovered objective state does not auto-dispatch until resumed", async () => {
+    await withTempDir(async (dir) => {
+      await withTempDir(async (dataHome) => {
+        const previousDataHome = process.env.OPENCODE_AUTOPILOT_DATA_HOME;
+        process.env.OPENCODE_AUTOPILOT_DATA_HOME = dataHome;
+        let promptCalls = 0;
+        const createPlugin = async () => {
+          const plugin = await AutopilotPlugin({
+            directory: dir,
+            worktree: dir,
+            client: {
+              tui: { showToast: async () => {} },
+              session: {
+                promptAsync: async () => {
+                  promptCalls += 1;
+                },
+              },
+            },
+          } as never);
+          const autopilotTool = plugin.tool?.autopilot;
+          const event = plugin.event as ((input: { event: unknown }) => Promise<void>) | undefined;
+          if (!autopilotTool || !event) throw new Error("expected plugin hooks");
+          return { autopilotTool, event };
+        };
+        const context = {
+          sessionID: "recovered-session",
+          messageID: "m1",
+          agent: "pi",
+          directory: dir,
+          worktree: dir,
+          abort: new AbortController().signal,
+          metadata: () => {},
+          ask: () => Effect.void,
+        };
+
+        const first = await createPlugin();
+        await first.autopilotTool.execute(
+          { action: "start", objective: "Persist and recover safely" },
+          context,
+        );
+
+        const second = await createPlugin();
+        await second.event({
+          event: { type: "session.idle", properties: { sessionID: "recovered-session" } },
+        });
+        expect(promptCalls).toBe(0);
+
+        await second.autopilotTool.execute({ action: "resume" }, context);
+        await second.event({
+          event: { type: "session.idle", properties: { sessionID: "recovered-session" } },
+        });
+        expect(promptCalls).toBe(1);
+
         if (previousDataHome === undefined) {
           delete process.env.OPENCODE_AUTOPILOT_DATA_HOME;
         } else {
@@ -606,6 +671,66 @@ describe("Plugin Integration — event handler", () => {
         const status = await autopilotTool.execute({ action: "status" }, context);
         expect(status).toContain("Legacy state objective");
         expect(status).toContain("legacy event");
+
+        if (previousDataHome === undefined) {
+          delete process.env.OPENCODE_AUTOPILOT_DATA_HOME;
+        } else {
+          process.env.OPENCODE_AUTOPILOT_DATA_HOME = previousDataHome;
+        }
+      });
+    });
+  });
+
+  test("persistent store normalizes legacy state and writes private state files", async () => {
+    await withTempDir(async (dir) => {
+      await withTempDir(async (dataHome) => {
+        const previousDataHome = process.env.OPENCODE_AUTOPILOT_DATA_HOME;
+        process.env.OPENCODE_AUTOPILOT_DATA_HOME = dataHome;
+        const legacyDir = join(dir, ".autopilot");
+        await mkdir(legacyDir, { recursive: true });
+        await writeFile(
+          join(legacyDir, "state.json"),
+          `${JSON.stringify({
+            version: 1,
+            states: {
+              bad: null,
+              legacy: {
+                session_id: "legacy",
+                mode: "ENABLED",
+                phase: "OBSERVE",
+                session_mode: "delegated-task",
+                goal: "Legacy minimal objective",
+                objective: "Legacy minimal objective",
+                run_mode: "objective",
+                status: "active",
+                continuation_count: 1,
+                max_continues: 3,
+                worker_agent: "general",
+                autonomous_strength: "balanced",
+              },
+            },
+            history: { legacy: ["legacy loaded"] },
+            permissionMode: { legacy: "limited" },
+          })}\n`,
+        );
+
+        const store = await PersistentStateStore.forRoot(dir);
+        const loaded = await store.load();
+        expect(loaded.states.bad).toBeUndefined();
+        expect(loaded.states.legacy?.max_tokens).toBe(200000);
+        expect(loaded.states.legacy?.no_progress_turns_before_pause).toBe(2);
+        const legacyState = loaded.states.legacy;
+        if (!legacyState) throw new Error("expected normalized legacy state");
+
+        await store.save(
+          createPersistedData(
+            new Map([["legacy", legacyState]]),
+            new Map([["legacy", ["saved"]]]),
+            new Map([["legacy", "limited"]]),
+          ),
+        );
+        const mode = (await stat(store.path)).mode & 0o777;
+        expect(mode).toBe(0o600);
 
         if (previousDataHome === undefined) {
           delete process.env.OPENCODE_AUTOPILOT_DATA_HOME;
@@ -758,6 +883,151 @@ describe("Plugin Integration — event handler", () => {
     const status = await autopilotTool.execute({ action: "status" }, context);
     expect(status).toContain("status=blocked");
     expect(status).toContain("requires allow-all");
+  });
+
+  test("tracked token budget stops objective before another continuation", async () => {
+    const prompts: string[] = [];
+    const plugin = await AutopilotPlugin({
+      directory: "/tmp",
+      worktree: "/tmp",
+      client: {
+        tui: { showToast: async () => {} },
+        session: {
+          promptAsync: async (opts: { parts?: Array<{ text?: string }> }) => {
+            prompts.push(opts.parts?.[0]?.text ?? "");
+          },
+        },
+      },
+    } as never);
+    const autopilotTool = plugin.tool?.autopilot;
+    const event = plugin.event as ((input: { event: unknown }) => Promise<void>) | undefined;
+    if (!autopilotTool || !event) throw new Error("expected plugin hooks");
+    const context = {
+      sessionID: "token-budget",
+      messageID: "m1",
+      agent: "pi",
+      directory: "/tmp",
+      worktree: "/tmp",
+      abort: new AbortController().signal,
+      metadata: () => {},
+      ask: () => Effect.void,
+    };
+
+    await autopilotTool.execute(
+      { action: "start", objective: "Stop after token budget", maxTokens: 10 },
+      context,
+    );
+    await event({ event: { type: "session.idle", properties: { sessionID: "token-budget" } } });
+    await event({
+      event: {
+        type: "message.updated",
+        properties: {
+          info: {
+            sessionID: "token-budget",
+            id: "budget-msg",
+            role: "assistant",
+            agent: "general",
+            tokens: { input: 2, output: 9 },
+          },
+        },
+      },
+    });
+    await event({
+      event: {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            type: "text",
+            sessionID: "token-budget",
+            messageID: "budget-msg",
+            id: "budget-part",
+            text: "**Autopilot status: continue**\nMore remains.",
+          },
+        },
+      },
+    });
+    await event({ event: { type: "session.idle", properties: { sessionID: "token-budget" } } });
+
+    expect(prompts).toHaveLength(1);
+    const status = await autopilotTool.execute({ action: "status" }, context);
+    expect(status).toContain("status=failed");
+    expect(status).toContain("stop=BUDGET_EXHAUSTED");
+    expect(status).toContain("tokens 11/10");
+  });
+
+  test("low-progress worker turns pause objective", async () => {
+    const prompts: string[] = [];
+    const plugin = await AutopilotPlugin({
+      directory: "/tmp",
+      worktree: "/tmp",
+      client: {
+        tui: { showToast: async () => {} },
+        session: {
+          promptAsync: async (opts: { parts?: Array<{ text?: string }> }) => {
+            prompts.push(opts.parts?.[0]?.text ?? "");
+          },
+        },
+      },
+    } as never);
+    const autopilotTool = plugin.tool?.autopilot;
+    const event = plugin.event as ((input: { event: unknown }) => Promise<void>) | undefined;
+    if (!autopilotTool || !event) throw new Error("expected plugin hooks");
+    const context = {
+      sessionID: "no-progress",
+      messageID: "m1",
+      agent: "pi",
+      directory: "/tmp",
+      worktree: "/tmp",
+      abort: new AbortController().signal,
+      metadata: () => {},
+      ask: () => Effect.void,
+    };
+
+    await autopilotTool.execute(
+      {
+        action: "start",
+        objective: "Pause on no progress",
+        noProgressTokenThreshold: 50,
+        noProgressTurns: 1,
+      },
+      context,
+    );
+    await event({ event: { type: "session.idle", properties: { sessionID: "no-progress" } } });
+    await event({
+      event: {
+        type: "message.updated",
+        properties: {
+          info: {
+            sessionID: "no-progress",
+            id: "low-msg",
+            role: "assistant",
+            agent: "general",
+            tokens: { output: 1 },
+          },
+        },
+      },
+    });
+    await event({
+      event: {
+        type: "message.part.updated",
+        properties: {
+          part: {
+            type: "text",
+            sessionID: "no-progress",
+            messageID: "low-msg",
+            id: "low-part",
+            text: "**Autopilot status: continue**\nTiny.",
+          },
+        },
+      },
+    });
+    await event({ event: { type: "session.idle", properties: { sessionID: "no-progress" } } });
+
+    expect(prompts).toHaveLength(1);
+    const status = await autopilotTool.execute({ action: "status" }, context);
+    expect(status).toContain("status=paused");
+    expect(status).toContain("stop=NO_PROGRESS");
+    expect(status).toContain("low-progress 1/1");
   });
 
   test("plan-backed objective run advances steps and validates at the end", async () => {

@@ -89,8 +89,15 @@ export interface ExtendedState {
   final_digest?: RunDigest;
   active_step_index: number;
   stop_reason: StopReason | null;
+  started_at: number;
   continuation_count: number;
   max_continues: number;
+  total_tokens: number;
+  max_tokens: number;
+  max_duration_ms: number;
+  no_progress_token_threshold: number;
+  no_progress_turns_before_pause: number;
+  no_progress_turns: number;
   worker_agent: string;
   autonomous_strength: AutonomousStrength;
 }

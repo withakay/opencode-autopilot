@@ -10,7 +10,7 @@ IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning for th
 |entry: `usage.ts#buildAutopilotUsage` -> help text for slash/direct tool usage
 
 ## Design
-|args: `action`, `{objective,goal,target,task}`, `doneWhen`, `verifyWith`, `plan`, `permissionMode`, `maxContinues`, `workerAgent`, `autonomousStrength`
+|args: `action`, `{objective,goal,target,task}`, `doneWhen`, `verifyWith`, `plan`, `permissionMode`, `maxContinues`, `maxDurationMs`, `maxTokens`, `noProgressTokenThreshold`, `noProgressTurns`, `workerAgent`, `autonomousStrength`
 |modes: explicit `on` => ambient/session-defaults; `start|run|implicit objective` => delegated objective run
 |aliases: `task|goal|target` normalize to `objective`; `task`/`goal` remain compatibility aliases
 |plan: `plan.ts#parsePlan` accepts JSON array or newline text -> `PlanStep[]`
@@ -23,7 +23,7 @@ IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning for th
 
 ## Integration
 |up: `.opencode/commands/autopilot.md`, OpenCode tool calls, `plugin.ts` deps |down: `state/factory.ts`, `prompts/normalize.ts`, `tools/{plan,planning,usage}.ts`
-|events: returns metadata via `context.metadata` with objective, verify, plan framework/source, plan step count
+|events: returns metadata via `context.metadata` with objective, verify, plan framework/source, plan step count, and budget settings
 
 ## Gotchas
 |!: `action="on"` stays ambient even if objective text is present; do not accidentally start objective runs from explicit ambient enable

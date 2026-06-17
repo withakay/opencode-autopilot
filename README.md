@@ -123,6 +123,20 @@ Autopilot supports two permission modes:
 
 `verifyWith` commands require `allow-all` because they run controller-side after the model claims the objective is complete.
 
+## Budgets And Stall Detection
+
+Objective runs have bounded continuation, duration, token, and low-progress budgets. Defaults are:
+
+| Budget | Default | Purpose |
+|---|---:|---|
+| `maxContinues` | `10` | Maximum autonomous prompts in one run. |
+| `maxDurationMs` | `900000` | Maximum wall-clock duration for the objective run. |
+| `maxTokens` | `200000` | Maximum tracked worker message tokens. |
+| `noProgressTokenThreshold` | `50` | Worker output below this token count is considered low-progress. |
+| `noProgressTurns` | `2` | Consecutive low-progress turns before Autopilot pauses. |
+
+When a duration or token budget is exhausted, Autopilot stops with a final run digest. When low-progress turns repeat, Autopilot pauses so you can inspect `/autopilot status` and resume only if there is still a safe next action.
+
 ## Packaged Wingman Agents
 
 This package includes optional worker-agent presets:
@@ -201,6 +215,8 @@ Autopilot keeps runtime state out of the repository by default. Objective state,
 `<project-key>` is a readable project slug plus a stable hash of the repository path, so different repositories do not collide.
 
 Repo-local `.autopilot/state.json` is treated as a legacy fallback: if user-data state does not exist yet, autopilot can still read the old file. New writes go to the user-data location.
+
+If OpenCode or the plugin restarts while an objective run is active, Autopilot recovers the run card in a paused state instead of replaying an autonomous prompt immediately. Review `/autopilot status`, then run `/autopilot resume` when it is safe to continue.
 
 Config fields:
 

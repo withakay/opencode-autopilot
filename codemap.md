@@ -15,11 +15,12 @@ IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning for th
 |entry: `package.json` scripts -> `build`, `typecheck`, `test`, `lint`, `check`, `postinstall`
 
 ## Design
-|runtime: per-session `ExtendedState` + transient `SessionTracking` + `SessionCache` + persisted `.autopilot/state.json`
+|runtime: per-session `ExtendedState` + transient `SessionTracking` + `SessionCache` + persisted user-data state under `~/.local/share/opencode/opencode-autopilot/projects/<project-key>/state.json`
 |modes: ambient `/autopilot on` injects autonomy defaults only; objective `/autopilot <task>|start|run` dispatches worker prompts until done/blocked/paused/limit
-|continuation: `session.idle` + worker reply marker => continue/validate/complete/block/step-done state transitions
+|continuation: `session.idle` + worker reply marker => continue/validate/complete/block/step-done state transitions; guarded by in-flight session set
 |plans: optional inline plan parsed to `PlanStep[]`; controller advances one step at a time and validates whole objective after final step
 |verification: optional `verifyWith` command runs controller-side only in `allow-all`; tokenized via `execFile`, shell metacharacters blocked
+|budgets: objective runs track continuation count, duration, worker tokens, and low-progress turns; token/duration exhaustion stops, repeated low-progress pauses
 |config: optional `.autopilot/config.{jsonc,json}` adds prompt hints, directive rules, workflow compaction reminders
 
 ## Flow
@@ -48,11 +49,12 @@ IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning for th
 
 ## Gotchas
 |!: README is human-facing; agent-facing slash parsing/prompt rules belong in `.opencode/commands/autopilot.md` and `prompts/`
-|!: `.autopilot/state.json` is local runtime state and ignored; do not commit it
+|!: runtime state is local user data; `.autopilot/state.json` is legacy fallback only and ignored; do not commit it
 |!: `.opencode/`, `.ito/`, `.github/`, `.codex/` may be tool-managed; avoid placing generated codemaps there unless explicitly requested
 |!: ambient and objective modes intentionally differ; do not make `/autopilot on` dispatch delegated work
 |!: duplicate idle dispatch guard depends on `SessionTracking.awaitingWorkerReply`
 |!: completion is two-phase; final `complete` should be validated before stop
+|!: recovered active objective runs pause after plugin restart; user must inspect status and resume explicitly
 
 ## Tests
 |tests: `bun test ./__tests__/` -> unit/integration plus skipped-by-default e2e

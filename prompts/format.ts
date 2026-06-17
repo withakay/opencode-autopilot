@@ -66,6 +66,7 @@ export function summarizeAutopilotState(state: ExtendedState | null | undefined)
   });
   const requiredSources = state.goal_contract.required_sources;
   const finalDigest = state.final_digest;
+  const elapsedSeconds = Math.max(0, Math.round((Date.now() - state.started_at) / 1000));
 
   const status = [
     `phase=${state.phase}`,
@@ -129,7 +130,7 @@ export function summarizeAutopilotState(state: ExtendedState | null | undefined)
       : state.verify_with
         ? `Last verification: not-run — ${state.verify_with}`
         : undefined,
-    `Budget: continuation ${state.continuation_count}/${state.max_continues}; agent ${state.worker_agent}`,
+    `Budget: continuation ${state.continuation_count}/${state.max_continues}; tokens ${state.total_tokens.toLocaleString()}/${state.max_tokens.toLocaleString()}; elapsed ${elapsedSeconds}s/${Math.round(state.max_duration_ms / 1000)}s; low-progress ${state.no_progress_turns}/${state.no_progress_turns_before_pause}; agent ${state.worker_agent}`,
     state.candidate_completion ? `Candidate completion: ${state.candidate_completion}` : undefined,
     finalDigest
       ? [

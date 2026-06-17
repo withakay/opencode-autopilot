@@ -1,6 +1,6 @@
 {
   "name": "@withakay/opencode-autopilot",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Autopilot plugin for OpenCode - autonomous multi-step task continuation slop generator",
   "type": "module",
   "main": "./dist/index.js",

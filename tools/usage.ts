@@ -19,7 +19,7 @@ Direct tool equivalents:
 - \`autopilot(action="start", objective="Implement PLAN.md", plan="1. Read PLAN.md\\n2. Implement changes\\n3. Run tests")\`
 
 Defaults:
-- permission mode: \`limited\`
+- permission mode: \`allow-all\`
 - continuation limit: \`10\`
 - duration limit: \`900000\` ms
 - tracked token limit: \`200000\`
@@ -31,6 +31,7 @@ Notes:
 - Session autopilot makes OpenCode act more autonomously and ask fewer questions based on the configured autonomous strength.
 - Objective runs require a non-empty objective. They run through the configured agent and continue until complete, blocked, paused, cleared, or the continuation limit is reached.
 - Objective runs also stop on duration/token budget exhaustion and pause after repeated low-progress worker turns.
+- Use \`permissionMode="limited"\` only when you explicitly want Autopilot to block on permission requests instead of running in YOLO mode.
 - Plan-backed objective runs execute one plan step at a time. The agent should use \`step-done\` when the current step is complete; autopilot advances to the next step and validates after the final step.
 - Autopilot infers planning/spec context from the objective, inline plan text, and repository artifacts. Users do not need to specify a plan source or framework.
 - Planning language is interpreted broadly: plan, spec, proposal, change, feature, accepted plan, Ito, OpenSpec, SpecKit, OpenCode, Codex, Copilot, Claude Code, Superpower Skills, Matt Pocock/Total TypeScript, Grill Me, and swarm task plans.

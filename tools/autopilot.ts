@@ -213,7 +213,7 @@ export function createAutopilotTool(deps: AutopilotToolDeps) {
           : "Autopilot objective cleared.";
       }
 
-      const permissionMode = args.permissionMode ?? "limited";
+      const permissionMode = args.permissionMode ?? "allow-all";
       const maxContinues = deps.normalizeMaxContinues(args.maxContinues);
       const normalizePositiveInteger =
         deps.normalizePositiveInteger ?? ((_value, fallback) => fallback);

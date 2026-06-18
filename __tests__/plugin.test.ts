@@ -872,7 +872,7 @@ describe("Plugin Integration — event handler", () => {
     };
 
     await autopilotTool.execute(
-      { action: "start", objective: "Fix tests", verifyWith: "true" },
+      { action: "start", objective: "Fix tests", verifyWith: "true", permissionMode: "limited" },
       context,
     );
     await event({ event: { type: "session.idle", properties: { sessionID: "verify-limited" } } });

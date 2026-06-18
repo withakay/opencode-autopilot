@@ -82,6 +82,7 @@ describe("Autopilot Tool", () => {
   test("turns on session autopilot without dispatching a delegated task", async () => {
     const stateMap = new Map<string, ExtendedState>();
     const historyMap = new Map<string, string[]>();
+    let armedPermissionMode: "allow-all" | "limited" | undefined;
 
     const tool = createAutopilotTool({
       getState: (sessionID) => stateMap.get(sessionID),
@@ -93,7 +94,8 @@ describe("Autopilot Tool", () => {
       initSession: (sessionID) => {
         historyMap.set(sessionID, []);
       },
-      onArmed: async (sessionID, state) => {
+      onArmed: async (sessionID, state, permissionMode) => {
+        armedPermissionMode = permissionMode;
         historyMap.set(sessionID, [
           state.goal ? `task:${state.goal}` : "session-defaults",
           `agent:${state.worker_agent}`,
@@ -110,6 +112,7 @@ describe("Autopilot Tool", () => {
     expect(result).toContain("Autopilot is enabled");
     expect(stateMap.get("s1")?.goal).toBe("");
     expect(stateMap.get("s1")?.run_mode).toBe("ambient");
+    expect(armedPermissionMode).toBe("allow-all");
     expect(historyMap.get("s1")).toContain("session-defaults");
   });
 
@@ -139,6 +142,7 @@ describe("Autopilot Tool", () => {
 
   test("starts an objective run from objective aliases", async () => {
     const stateMap = new Map<string, ExtendedState>();
+    let armedPermissionMode: "allow-all" | "limited" | undefined;
 
     const tool = createAutopilotTool({
       getState: (sessionID) => stateMap.get(sessionID),
@@ -148,7 +152,9 @@ describe("Autopilot Tool", () => {
       createSessionState,
       normalizeMaxContinues: () => 10,
       initSession: () => {},
-      onArmed: async () => {},
+      onArmed: async (_sessionID, _state, permissionMode) => {
+        armedPermissionMode = permissionMode;
+      },
       summarizeState: () => "unused",
       getHistory: () => [],
       onStop: () => {},
@@ -167,6 +173,8 @@ describe("Autopilot Tool", () => {
 
     const state = stateMap.get("s1");
     expect(result).toContain("Autopilot objective run started");
+    expect(result).toContain("allow-all mode");
+    expect(armedPermissionMode).toBe("allow-all");
     expect(state?.run_mode).toBe("objective");
     expect(state?.session_mode).toBe("delegated-task");
     expect(state?.objective).toBe("Fix tests without stopping until bun test passes");

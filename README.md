@@ -118,10 +118,10 @@ Autopilot supports two permission modes:
 
 | Mode | Behavior |
 |---|---|
-| `limited` | Default. Permission requests are denied and the objective blocks for the user. |
-| `allow-all` | Permission requests are allowed automatically. |
+| `allow-all` | Default YOLO mode. Permission requests are allowed automatically while Autopilot is active. |
+| `limited` | Permission requests are denied and the objective blocks for the user. |
 
-`verifyWith` commands require `allow-all` because they run controller-side after the model claims the objective is complete.
+`verifyWith` commands require `allow-all` because they run controller-side after the model claims the objective is complete. Pass `permissionMode="limited"` only when you explicitly want Autopilot to stop for permission-gated actions.
 
 ## Budgets And Stall Detection
 

@@ -16,6 +16,7 @@ Interpret `$ARGUMENTS` like this:
 Additional parsing rules:
 - If the user includes `allow-all` or `allow all`, set `permissionMode` to `allow-all`
 - If the user includes `limited`, set `permissionMode` to `limited`
+- If the user does not specify a permission mode, omit `permissionMode`; the tool defaults to `allow-all` YOLO mode
 - If the user includes a continuation cap such as `max 3`, `max=3`, or `continue 3 times`, pass it as `maxContinues`
 - If the user includes a duration cap such as `15 minutes`, `max 15m`, or `duration 900000ms`, pass it as `maxDurationMs` in milliseconds
 - If the user includes a token cap such as `max tokens 100000` or `token budget 100k`, pass it as `maxTokens`

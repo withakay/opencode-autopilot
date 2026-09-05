@@ -1,7 +1,4 @@
-import { createHash } from "node:crypto";
-import { chmod, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { basename, dirname, join } from "node:path";
+import type { Plugin } from "@opencode-ai/plugin";
 import {
   AUTOPILOT_DEFAULT_MAX_DURATION_MS,
   AUTOPILOT_DEFAULT_MAX_TOKENS,
@@ -20,23 +17,14 @@ import type {
 import type { StopReason } from "../types/stop-reason.ts";
 import { ensureGoalContract } from "./goal-contract.ts";
 
-export function getAutopilotDataHome(): string {
-  return (
-    process.env.OPENCODE_AUTOPILOT_DATA_HOME ??
-    join(homedir(), ".local", "share", "opencode", "opencode-autopilot")
-  );
+export interface PersistedSessionEntry {
+  version: 2;
+  state: ExtendedState;
+  history: string[];
+  permissionMode: "allow-all" | "limited";
 }
 
-export interface PersistedAutopilotData {
-  version: 1;
-  states: Record<string, ExtendedState>;
-  history: Record<string, string[]>;
-  permissionMode: Record<string, "allow-all" | "limited">;
-}
-
-function cloneEmpty(): PersistedAutopilotData {
-  return { version: 1, states: {}, history: {}, permissionMode: {} };
-}
+const STATE_KEY_PREFIX = "state/";
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -55,7 +43,7 @@ function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback
   return typeof value === "string" && allowed.includes(value as T) ? (value as T) : fallback;
 }
 
-function normalizeState(sessionID: string, rawState: unknown): ExtendedState | null {
+export function normalizeState(sessionID: string, rawState: unknown): ExtendedState | null {
   if (!isObject(rawState)) return null;
 
   const objective = asString(rawState.objective, asString(rawState.goal)).trim();
@@ -174,118 +162,54 @@ function normalizeState(sessionID: string, rawState: unknown): ExtendedState | n
   return state;
 }
 
-export class PersistentStateStore {
-  private queue = Promise.resolve();
-
-  constructor(
-    private readonly filePath: string,
-    private readonly legacyFilePath?: string,
-  ) {}
-
-  static async forRoot(root: string): Promise<PersistentStateStore> {
-    const canonicalRoot = await canonicalizeRoot(root);
-    const projectKey = createProjectKey(canonicalRoot);
-    const filePath = join(getAutopilotDataHome(), "projects", projectKey, "state.json");
-    const legacyFilePath = join(root, ".autopilot", "state.json");
-    return new PersistentStateStore(filePath, legacyFilePath);
-  }
-
-  get path(): string {
-    return this.filePath;
-  }
-
-  async load(): Promise<PersistedAutopilotData> {
-    const primary = await this.loadFrom(this.filePath);
-    if (primary) return primary;
-
-    if (this.legacyFilePath) {
-      const legacy = await this.loadFrom(this.legacyFilePath);
-      if (legacy) return legacy;
-    }
-
-    return cloneEmpty();
-  }
-
-  private async loadFrom(filePath: string): Promise<PersistedAutopilotData | null> {
-    try {
-      const raw = await readFile(filePath, "utf8");
-      const parsed = JSON.parse(raw) as Partial<PersistedAutopilotData>;
-      if (parsed.version !== 1 || !parsed.states) return cloneEmpty();
-
-      const data = cloneEmpty();
-      for (const [sessionID, state] of Object.entries(parsed.states)) {
-        const normalized = normalizeState(sessionID, state);
-        if (normalized) data.states[sessionID] = normalized;
-      }
-      data.history = parsed.history ?? {};
-      data.permissionMode = parsed.permissionMode ?? {};
-      return data;
-    } catch (error) {
-      if ((error as { code?: string }).code === "ENOENT") return null;
-      throw error;
-    }
-  }
-
-  async save(data: PersistedAutopilotData): Promise<void> {
-    const run = this.queue.then(async () => {
-      await mkdir(dirname(this.filePath), { recursive: true, mode: 0o700 });
-      const tmp = `${this.filePath}.${process.pid}.${Date.now()}.tmp`;
-      await writeFile(tmp, `${JSON.stringify(data, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
-      await rename(tmp, this.filePath);
-      await chmod(this.filePath, 0o600);
-    });
-    this.queue = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
-  }
-
-  async clear(): Promise<void> {
-    const run = this.queue.then(async () => {
-      await rm(this.filePath, { force: true });
-    });
-    this.queue = run.then(
-      () => undefined,
-      () => undefined,
-    );
-    return run;
-  }
-}
-
-async function canonicalizeRoot(root: string): Promise<string> {
-  try {
-    return await realpath(root);
-  } catch {
-    return root;
-  }
-}
-
-function slugPart(root: string): string {
-  return (
-    basename(root)
-      .toLowerCase()
-      .replace(/[^a-z0-9._-]+/g, "-")
-      .replace(/^-+|-+$/g, "")
-      .slice(0, 48) || "project"
-  );
-}
-
-export function createProjectKey(root: string): string {
-  const digest = createHash("sha256").update(root).digest("hex").slice(0, 16);
-  return `${slugPart(root)}-${digest}`;
-}
-
-export function createPersistedData(
-  states: Map<string, ExtendedState>,
-  history: Map<string, string[]>,
-  permissionMode: Map<string, "allow-all" | "limited">,
-): PersistedAutopilotData {
-  if (states.size === 0) return cloneEmpty();
+export function normalizeEntry(sessionID: string, raw: unknown): PersistedSessionEntry | null {
+  if (!isObject(raw)) return null;
+  const state = normalizeState(sessionID, raw.state);
+  if (!state) return null;
+  const history = Array.isArray(raw.history)
+    ? raw.history.filter((item): item is string => typeof item === "string")
+    : [];
   return {
-    version: 1,
-    states: Object.fromEntries(states),
-    history: Object.fromEntries(history),
-    permissionMode: Object.fromEntries(permissionMode),
+    version: 2,
+    state,
+    history,
+    permissionMode: oneOf(raw.permissionMode, ["allow-all", "limited"] as const, "allow-all"),
   };
+}
+
+type StorageDomain = Plugin.Context["storage"];
+type StorageJson = Parameters<StorageDomain["set"]>[1];
+
+/** Session state store backed by the plugin storage domain (global SQLite KV). */
+export class StorageStateStore {
+  constructor(private readonly storage: StorageDomain) {}
+
+  private key(sessionID: string): string {
+    return `${STATE_KEY_PREFIX}${sessionID}`;
+  }
+
+  async load(): Promise<Map<string, PersistedSessionEntry>> {
+    const entries = new Map<string, PersistedSessionEntry>();
+    let after: string | undefined;
+    do {
+      const result = await this.storage.scan({ prefix: STATE_KEY_PREFIX, after });
+      for (const item of result.entries) {
+        const sessionID = item.key.slice(STATE_KEY_PREFIX.length);
+        const entry = normalizeEntry(sessionID, item.value);
+        if (sessionID && entry) entries.set(sessionID, entry);
+      }
+      after = result.next;
+    } while (after);
+    return entries;
+  }
+
+  async save(sessionID: string, entry: PersistedSessionEntry): Promise<void> {
+    // Round-trip through JSON to drop undefined fields before hitting the KV.
+    const value = JSON.parse(JSON.stringify(entry)) as StorageJson;
+    await this.storage.set(this.key(sessionID), value);
+  }
+
+  async remove(sessionID: string): Promise<void> {
+    await this.storage.remove(this.key(sessionID));
+  }
 }

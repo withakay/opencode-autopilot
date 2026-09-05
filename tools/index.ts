@@ -1,2 +1,7 @@
-export type { AutopilotToolDeps } from "./autopilot.ts";
-export { createAutopilotTool } from "./autopilot.ts";
+export type { AutopilotActionArgs, AutopilotActionName } from "../command/parse.ts";
+export {
+  AUTOPILOT_TOOL_DESCRIPTION,
+  AUTOPILOT_TOOL_NAME,
+  autopilotToolInput,
+  normalizeAutopilotToolInput,
+} from "./autopilot.ts";

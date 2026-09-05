@@ -3,61 +3,57 @@
 IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning for this repository.
 
 ## Responsibility
-|owns: OpenCode plugin providing ambient autopilot autonomy and durable delegated objective runs with plan steps, continuation nudges, validation, permission policy, compaction preservation, and persisted local state
-|not: OpenCode core agent runtime, slash-command dynamic registration, public API beyond exported plugin/package assets
+|owns: OpenCode v2 plugin providing ambient autopilot autonomy and durable delegated objective runs with plan steps, continuation nudges, validation, permission policy, and storage-backed state
+|not: OpenCode core agent runtime, TUI rendering beyond the `./tui` companion, public API beyond exported plugin/package assets
 
 ## Entry Points
-|entry: `index.ts` -> exports `AutopilotPlugin`
-|entry: `plugin.ts#AutopilotPlugin` -> OpenCode plugin factory; assembles tool + hooks
-|entry: `tools/autopilot.ts#createAutopilotTool` -> control tool API used by `/autopilot` and direct tool calls
-|entry: `.opencode/commands/autopilot.md` -> packaged slash command UX (installed by postinstall, included in npm files)
-|entry: `README.md` -> human-facing install/usage/config/development docs
-|entry: `package.json` scripts -> `build`, `typecheck`, `test`, `lint`, `check`, `postinstall`
+|entry: `index.ts` -> default export `Plugin.define({ id: "autopilot", setup: createAutopilotPlugin })`
+|entry: `plugin.ts#createAutopilotPlugin` -> controller wiring: command, tool, hooks, event loop, rpc, storage
+|entry: `command/parse.ts#parseAutopilotCommand` -> deterministic `/autopilot` grammar
+|entry: `controller/actions.ts#runAction` -> shared action execution for command + tool
+|entry: `rpc.ts#AutopilotRpc` -> RPC contract (`./rpc` export); `tui.ts` companion (`./tui` export)
+|entry: `package.json` scripts -> `build`, `typecheck`, `test`, `lint`, `check`
 
 ## Design
-|runtime: per-session `ExtendedState` + transient `SessionTracking` + `SessionCache` + persisted user-data state under `~/.local/share/opencode/opencode-autopilot/projects/<project-key>/state.json`
-|modes: ambient `/autopilot on` injects autonomy defaults only; objective `/autopilot <task>|start|run` dispatches worker prompts until done/blocked/paused/limit
-|continuation: `session.idle` + worker reply marker => continue/validate/complete/block/step-done state transitions; guarded by in-flight session set
-|plans: optional inline plan parsed to `PlanStep[]`; controller advances one step at a time and validates whole objective after final step
-|verification: optional `verifyWith` command runs controller-side only in `allow-all`; tokenized via `execFile`, shell metacharacters blocked
-|budgets: objective runs track continuation count, duration, worker tokens, and low-progress turns; token/duration exhaustion stops, repeated low-progress pauses
-|config: optional `.autopilot/config.{jsonc,json}` adds prompt hints, directive rules, workflow compaction reminders
+|runtime: per-session `ExtendedState` + transient `SessionTracking`; persisted per session as `state/<sessionID>` in `ctx.storage`
+|modes: ambient `/autopilot on` injects autonomy guidance only; `/autopilot <objective>` dispatches the first worker prompt inside the command execute call
+|continuation: `session.execution.succeeded` -> read worker reply via `ctx.session.context` since `dispatchedAt` -> marker directive -> continue/validate/complete/block/step-done
+|verification: optional `verifyWith` runs controller-side only in `allow-all`; tokenized `execFile`, shell metacharacters blocked; cwd = `ctx.location.directory`
+|budgets: continuation count, duration, tracked tokens, low-progress turns; stops or pauses with explicit stop reasons
+|feedback: rpc events `notice`/`card` consumed by the TUI companion; emits never break the controller
 
 ## Flow
-|ambient: slash/tool `on` > `createSessionState(...session-defaults)` > permission mode saved > system transform injects autonomy prompt without markers
-|objective: slash/tool objective > parse plan/infer planning ctx > state persisted > first idle dispatches worker > worker marker cached > next idle advances/continues/validates/stops
-|validation: model marks complete/validate > validation prompt > final complete triggers `verifyWith` if set > passed => `COMPLETED`; failed => continue; blocked => stop for user
-|events: OpenCode messages populate `SessionCache`; `session.idle` drives loop; `session.error/deleted` stop/cleanup
-|build: `bun build ./index.ts --outdir ./dist --target node --external @opencode-ai/{plugin,sdk}`
+|objective: command/tool start > parse args/plan > `createSessionState` > persist > `session.synthetic` dispatch (same call) > terminal events drive the loop
+|stop: pause/off/clear set `selfInterrupt` then `session.interrupt`, so the interrupted event is not read as a user stop
+|recovery: startup `storage.scan` > active runs become paused `RECOVERED_AFTER_RESTART`
+|build: `bun build ./index.ts ./tui.ts ./rpc.ts --outdir ./dist --target bun --external '@opencode-ai/*' ...`
 
 ## Directory Summary
 | Directory | Responsibility | codemap |
 |---|---|---|
+| `command/` | `/autopilot` argument grammar parser. | — |
 | `config/` | Optional repo-local config loading and workflow summaries. | `config/codemap.md` |
-| `hooks/` | OpenCode hook adapters and event/message/permission plumbing. | `hooks/codemap.md` |
-| `prompts/` | System/continuation/validation prompt builders, directive parsing, status formatting. | `prompts/codemap.md` |
-| `state/` | State factories, durable persistence, transient session cache. | `state/codemap.md` |
-| `tools/` | `autopilot` tool API, plan parsing, planning inference, usage text. | `tools/codemap.md` |
+| `controller/` | Core state/dispatch, action execution, reply decisions, verification. | — |
+| `hooks/` | v2 event routing, permission policy, context text builder. | `hooks/codemap.md` |
+| `prompts/` | Prompt builders, directive parsing, status formatting. | `prompts/codemap.md` |
+| `state/` | State factories and storage persistence. | `state/codemap.md` |
+| `tools/` | `autopilot` tool schema, plan parsing, planning inference, usage text. | `tools/codemap.md` |
 | `types/` | Shared runtime/state type vocabulary. | `types/codemap.md` |
-| `__tests__/` | Unit/integration coverage for tool, plugin, prompts, config. | `__tests__/codemap.md` |
-| `__tests__/e2e/` | Guarded behavioral PTY/simulation validation. | `__tests__/e2e/codemap.md` |
+| `__tests__/` | Unit/integration coverage through a fake `Plugin.Context`. | `__tests__/codemap.md` |
 
 ## Integration
-|package: npm package `@withakay/opencode-autopilot`; peer deps `@opencode-ai/plugin`, `@opencode-ai/sdk`
-|assets: package ships `dist`, `README.md`, `.opencode/commands/autopilot.md`, wingman agents/config, installer script
-|external surfaces: OpenCode hooks `tool.autopilot`, `permission.ask`, `experimental.chat.system.transform`, `chat.message`, `experimental.session.compacting`, `event`, `tool.execute.after`
+|package: npm package `@withakay/opencode-autopilot`; dependency `@opencode-ai/plugin@beta`
+|assets: package ships `dist`, `README.md`, wingman agents/config
+|external surfaces: `/autopilot` command, `autopilot` tool, `session.hook("context")`, `permission.hook("evaluate")`, `ctx.event.subscribe`, `ctx.rpc` (`AutopilotRpc`)
 
 ## Gotchas
-|!: README is human-facing; agent-facing slash parsing/prompt rules belong in `.opencode/commands/autopilot.md` and `prompts/`
-|!: runtime state is local user data; `.autopilot/state.json` is legacy fallback only and ignored; do not commit it
-|!: `.opencode/`, `.ito/`, `.github/`, `.codex/` may be tool-managed; avoid placing generated codemaps there unless explicitly requested
 |!: ambient and objective modes intentionally differ; do not make `/autopilot on` dispatch delegated work
-|!: duplicate idle dispatch guard depends on `SessionTracking.awaitingWorkerReply`
-|!: completion is two-phase; final `complete` should be validated before stop
+|!: double-dispatch guard is `SessionTracking.awaitingWorkerReply`; stale execution ends are dropped via `dispatchedAt`
+|!: completion is two-phase; final `complete` is validated (and `verifyWith` executed) before stop
 |!: recovered active objective runs pause after plugin restart; user must inspect status and resume explicitly
 
 ## Tests
-|tests: `bun test ./__tests__/` -> unit/integration plus skipped-by-default e2e
+|tests: `bun test ./__tests__/`
 |checks: `bun run typecheck`; `bun run lint`; `bun run check` = lint + typecheck
 
 ## Update Triggers

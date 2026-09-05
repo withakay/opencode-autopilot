@@ -7,7 +7,7 @@ IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning for th
 
 ## Entry Points
 |entry: `autopilot-config.ts#loadAutopilotConfig(directory)` -> `AutopilotConfig` |caller: `plugin.ts` at plugin initialization
-|entry: `autopilot-config.ts#summarizeWorkflow(config)` -> compaction/workflow reminder lines |caller: `plugin.ts` > `hooks/session-compacting.ts`
+|entry: `autopilot-config.ts#summarizeWorkflow(config)` -> compaction/workflow reminder lines |caller: `hooks/system-transform.ts` context text builder
 
 ## Design
 |schema: `promptInjection.{system,continuation,validation,compaction}`, `directiveRules.{blockedPatterns,highImpactPatterns}`, `workflow.{active,name,phase,goal,doneCriteria,nextActions}`
@@ -19,7 +19,7 @@ IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning for th
 |summary: active workflow > optional lines for name/phase/goal/doneCriteria/nextActions
 
 ## Integration
-|up: `plugin.ts` caches config once per plugin instance |down: `prompts/*` consume injection/rules, `hooks/session-compacting.ts` consumes workflow summary
+|up: `plugin.ts` caches config once per plugin instance |down: `prompts/*` consume injection/rules, `hooks/system-transform.ts` consumes workflow summary
 
 ## Gotchas
 |!: config is best-effort; malformed config returns `{}` and must not break plugin startup

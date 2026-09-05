@@ -37,30 +37,6 @@
       "mtimeMs": 1778696291054,
       "hash": "91595685678a62453226bcc36500c335912a33df"
     },
-    "__tests__/e2e/README.md": {
-      "path": "__tests__/e2e/README.md",
-      "size": 18456,
-      "mtimeMs": 1775630550322,
-      "hash": "e0601330ee59d38b9c177eef7fb49085c9c8645d"
-    },
-    "__tests__/e2e/autonomous-behavior.test.ts": {
-      "path": "__tests__/e2e/autonomous-behavior.test.ts",
-      "size": 20248,
-      "mtimeMs": 1777150699430,
-      "hash": "8fc221c8d087b264aba427079601e07a6e0e56dc"
-    },
-    "__tests__/e2e/helpers/fixtures.ts": {
-      "path": "__tests__/e2e/helpers/fixtures.ts",
-      "size": 4493,
-      "mtimeMs": 1775626240757,
-      "hash": "e51b22b3034af9e2ee37c90d49ae75cc2c139a47"
-    },
-    "__tests__/e2e/helpers/pty-runner.ts": {
-      "path": "__tests__/e2e/helpers/pty-runner.ts",
-      "size": 20171,
-      "mtimeMs": 1777150699430,
-      "hash": "d19f01a5802f015fc459ddda8853a65f9ace5d24"
-    },
     "__tests__/plugin.test.ts": {
       "path": "__tests__/plugin.test.ts",
       "size": 31493,
@@ -78,12 +54,6 @@
       "size": 4078,
       "mtimeMs": 1777150699431,
       "hash": "293e2985d9cefd05e0ee41420ca10ba5652d19d5"
-    },
-    "hooks/chat-message.ts": {
-      "path": "hooks/chat-message.ts",
-      "size": 864,
-      "mtimeMs": 1777150699431,
-      "hash": "9bad6dff86c2c02561f473a946ae8094811ef39f"
     },
     "hooks/event-handler.ts": {
       "path": "hooks/event-handler.ts",
@@ -103,23 +73,11 @@
       "mtimeMs": 1774390281084,
       "hash": "75b33330c2609a2071a8fa4a3bf1f278e99d301f"
     },
-    "hooks/session-compacting.ts": {
-      "path": "hooks/session-compacting.ts",
-      "size": 3553,
-      "mtimeMs": 1778697581989,
-      "hash": "b1eb6d121ea450b71732b6655b11949e258b6c45"
-    },
     "hooks/system-transform.ts": {
       "path": "hooks/system-transform.ts",
       "size": 3138,
       "mtimeMs": 1778697856988,
       "hash": "d81061d738d4303d5895daf0a3909e41c5733177"
-    },
-    "hooks/tool-after.ts": {
-      "path": "hooks/tool-after.ts",
-      "size": 890,
-      "mtimeMs": 1775620788462,
-      "hash": "d56c246dc2193e408fe290df7a5622b02ae42aa2"
     },
     "index.ts": {
       "path": "index.ts",
@@ -192,12 +150,6 @@
       "size": 2803,
       "mtimeMs": 1778702883011,
       "hash": "99ea9483508c5e0fee428662e290cfe2134530be"
-    },
-    "state/session-cache.ts": {
-      "path": "state/session-cache.ts",
-      "size": 2636,
-      "mtimeMs": 1774390281086,
-      "hash": "ae4962d21310249bf6e3a89b7a5dafdb5b126450"
     },
     "tools/autopilot.ts": {
       "path": "tools/autopilot.ts",

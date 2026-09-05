@@ -22,7 +22,7 @@ IMPORTANT: Prefer retrieval-led reasoning over pre-training-led reasoning for th
 |up: all runtime folders import from `types/index.ts` |down: no runtime deps
 
 ## Gotchas
-|!: adding/changing `ExtendedState` fields may require updates in `state/factory.ts`, `state/persistence.ts`, `prompts/format.ts`, `hooks/{system-transform,session-compacting}.ts`, tests
+|!: adding/changing `ExtendedState` fields may require updates in `state/factory.ts`, `state/persistence.ts`, `prompts/format.ts`, `hooks/system-transform.ts`, tests
 |!: `AgentPhase` intentionally narrow (`OBSERVE|STOPPED`); objective lifecycle detail lives in `status`
 |!: `StopReason` values are user-visible in status summaries and tests
 

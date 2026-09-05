@@ -1,287 +1,119 @@
 # @withakay/opencode-autopilot
 
-Autopilot plugin for OpenCode. It adds a `/autopilot` command for session-level autonomy and durable objective runs that keep nudging a worker agent until the work is complete, blocked, paused, cleared, or the continuation limit is reached.
+OpenCode v2 plugin for ambient autonomy and bounded objective runs.
 
 ## Install
 
-```bash
-npm install @withakay/opencode-autopilot
-# or
-bun add @withakay/opencode-autopilot
-```
-
-Register the plugin in `opencode.jsonc`:
+Add the package to `opencode.jsonc`. OpenCode v2 installs npm plugins itself:
 
 ```jsonc
 {
-  "plugin": [
-    "@withakay/opencode-autopilot"
-  ]
+  "plugins": ["@withakay/opencode-autopilot@beta"]
 }
 ```
 
-## What Gets Installed
+For a local checkout, use its absolute path instead:
 
-The package postinstall script provisions OpenCode assets into the consuming project:
+```jsonc
+{
+  "plugins": ["/absolute/path/to/opencode-autopilot"]
+}
+```
 
-| Asset | Purpose |
-|---|---|
-| `.opencode/commands/autopilot.md` | `/autopilot` slash command |
-| `.opencode/agents/Autopilot-Wingman-*.md` | Optional packaged worker agents |
-| `.opencode/wingman-config.json` | Reference config for packaged worker agents |
+OpenCode v2 uses the `plugins` key. The v1 `plugin` key and
+`.opencode/commands` files are not used. The package does not install a
+slash-command file.
 
-The installer is non-destructive for customized Wingman assets:
+## Command
 
-- existing Wingman agent files are preserved
-- existing `wingman-config.json` is preserved
-- the `/autopilot` slash command is updated to the packaged version when it changes
-
-OpenCode plugins do not dynamically register slash commands or agents, so this package installs the corresponding markdown assets into your project.
-
-## Usage
-
-Use the slash command in an OpenCode session:
-
-| Command | Behavior |
-|---|---|
-| `/autopilot on` | Enables ambient autonomy defaults for the session. |
-| `/autopilot off` or `/autopilot stop` | Disables autopilot. |
-| `/autopilot status` | Shows the current autopilot state and recent events. |
-| `/autopilot <objective>` | Starts an objective run for the given work. |
-| `/autopilot pause` | Pauses the active objective run. |
-| `/autopilot resume` | Resumes a paused or blocked objective run. |
-| `/autopilot clear` | Clears the active objective run. |
-
-Examples:
+`/autopilot` parses its arguments deterministically:
 
 ```text
-/autopilot on
-/autopilot Fix the failing tests without stopping until bun test passes
-/autopilot Implement PLAN.md and validate with bun test
-/autopilot status
+(empty) | help                      -> help
+on [flags]                          -> ambient autonomy
+off | stop                          -> stop
+pause                               -> pause objective
+resume [flags]                      -> resume objective
+clear                               -> clear objective
+status                              -> run card
+<objective> [flags]                 -> start objective run
 ```
+
+Flags are removed from the objective when they occur on the first line:
+
+```text
+--agent=<id> | --agent <id>
+--max=<n> | --max <n> | max <n>
+--limited | limited, --allow-all | allow-all
+--duration=<15m|900s|900000ms|900000>
+--tokens=<100k|100000>
+--verify="<cmd>" | --done-when="<text>"
+--strength=<conservative|balanced|aggressive>
+```
+
+The first line is the objective. Remaining lines become a plan when they look
+like a list. Otherwise they extend the objective.
 
 ## Modes
 
-Autopilot has two main modes:
+- `on` enables ambient autonomy. It adds guidance but does not start a loop.
+- An objective starts a bounded worker run and dispatches its first prompt in
+  the same command. It continues until completion, a blocker, a pause, a
+  clear, or a budget limit.
+- `conservative`, `balanced`, and `aggressive` control how strongly the
+  plugin prefers safe defaults. Objective runs use `aggressive` by default.
 
-| Mode | How To Start | What It Does |
-|---|---|---|
-| Ambient autonomy | `/autopilot on` | Injects guidance that makes the active agent choose safe defaults and ask fewer routine questions. It does not start a continuation loop. |
-| Objective run | `/autopilot <objective>` | Delegates work to a worker agent and continues prompting it until the objective reaches a terminal state. |
+`allow-all` is the default permission mode. It allows permission requests while
+Autopilot is active. `limited` denies permission requests and blocks the
+objective. `verifyWith` commands require `allow-all`.
 
-Objective runs are best when the prompt includes a verifiable stopping condition:
+Default budgets:
 
-```text
-/autopilot Complete the parser refactor without stopping until bun test and bun run typecheck pass
-```
+| Budget | Default |
+|---|---:|
+| Continuations | `10` |
+| Duration | `900000` ms |
+| Worker tokens | `200000` |
+| Low-progress threshold | `50` output tokens |
+| Low-progress turns before pause | `2` |
 
-## Plans And Specs
+Run `/autopilot status` to request the current run card. The TUI companion
+opens the card in a dialog. Notices appear as three-second toasts.
 
-Autopilot can work from plan/spec language in the objective. It infers likely planning context from the objective, inline plan text, and repository artifacts such as `PLAN.md`, `specs/`, `.ito`, `openspec`, or `.specify`.
+The model can use the `autopilot` tool for the same actions. It accepts an
+objective, plan, stopping condition, verification command, agent, permission
+mode, strength, and budget values.
 
-Users do not need to specify a plan framework. Phrases like "follow the plan", "apply the spec", "implement the proposal", or "continue the accepted change" are enough for autopilot to look for relevant context before continuing.
+## TUI And Agents
 
-## Goal Contracts And Run Cards
+The `./tui` export is auto-loaded by OpenCode v2. It subscribes to the server
+RPC and displays notices as toasts and status cards as dialogs.
 
-Objective runs now create a structured goal contract from the prompt, `doneWhen`, `verifyWith`, plan text, and detected plan/spec sources. The contract tracks:
-
-- goal quality (`strong`, `inferred`, or `weak`)
-- stop condition
-- read-first sources such as `PLAN.md` or `specs/...`
-- acceptance criteria derived from `doneWhen`, `verifyWith`, or plan steps
-- checkpoint evidence and the latest verification result
-
-Use `/autopilot status` to inspect a human-readable run card while the objective is running:
-
-```text
-Autopilot status: ...
-
-## Autopilot Run Card
-Objective: Fix the failing tests without stopping until bun test passes
-Status: active (ENABLED)
-Goal quality: strong
-Stop condition: bun test passes
-Current checkpoint: Repair verification failure (active)
-Acceptance criteria:
-• bun test passes
-• Verification command passes: bun test
-Last verification: failed — Verification command failed (bun test): ...
-Budget: continuation 3/10; agent general
-```
-
-When a run completes, blocks, fails, or is cleared, the status includes a final digest with the stop reason, recent evidence, and a suggested next action when applicable.
-
-## Permissions
-
-Autopilot supports two permission modes:
-
-| Mode | Behavior |
-|---|---|
-| `allow-all` | Default YOLO mode. Permission requests are allowed automatically while Autopilot is active. |
-| `limited` | Permission requests are denied and the objective blocks for the user. |
-
-`verifyWith` commands require `allow-all` because they run controller-side after the model claims the objective is complete. Pass `permissionMode="limited"` only when you explicitly want Autopilot to stop for permission-gated actions.
-
-## Budgets And Stall Detection
-
-Objective runs have bounded continuation, duration, token, and low-progress budgets. Defaults are:
-
-| Budget | Default | Purpose |
-|---|---:|---|
-| `maxContinues` | `10` | Maximum autonomous prompts in one run. |
-| `maxDurationMs` | `900000` | Maximum wall-clock duration for the objective run. |
-| `maxTokens` | `200000` | Maximum tracked worker message tokens. |
-| `noProgressTokenThreshold` | `50` | Worker output below this token count is considered low-progress. |
-| `noProgressTurns` | `2` | Consecutive low-progress turns before Autopilot pauses. |
-
-When a duration or token budget is exhausted, Autopilot stops with a final run digest. When low-progress turns repeat, Autopilot pauses so you can inspect `/autopilot status` and resume only if there is still a safe next action.
-
-## Packaged Wingman Agents
-
-This package includes optional worker-agent presets:
-
-- `Autopilot-Wingman-GLM51`
-- `Autopilot-Wingman-Kimi25`
-- `Autopilot-Wingman-MiniMax25`
-- `Autopilot-Wingman-GH-GPT54`
-- `Autopilot-Wingman-GH-Gemini31`
-- `Autopilot-Wingman-GH-Sonnet46`
-
-Most users can ignore these and use the default worker agent. They are available if you want to route objective runs to a specific model/profile.
-
-## Optional Repo Config
-
-Autopilot reads optional repo-local config from:
-
-- `.opencode/opencode-autopilot.jsonc` (preferred)
-- `.opencode/opencode-autopilot.json`
-- `.autopilot/config.jsonc`
-- `.autopilot/config.json`
-
-The `.opencode/opencode-autopilot.jsonc` file wins over legacy `.autopilot/config.*` files. If no config exists, autopilot uses built-in behavior.
-
-Example:
-
-```jsonc
-{
-  "promptInjection": {
-    "system": [
-      "Follow the active spec workflow if present."
-    ],
-    "continuation": [
-      "Keep working through the current spec checklist."
-    ],
-    "validation": [
-      "Before marking complete, validate against the acceptance criteria."
-    ],
-    "compaction": [
-      "Preserve current workflow phase, acceptance criteria, and next actions."
-    ]
-  },
-  "directiveRules": {
-    "blockedPatterns": [
-      "missing acceptance criteria"
-    ],
-    "highImpactPatterns": [
-      "schema migration"
-    ]
-  },
-  "workflow": {
-    "name": "SpecFlow",
-    "phase": "implement",
-    "goal": "Finish the current spec increment",
-    "doneCriteria": [
-      "implementation complete",
-      "tests pass"
-    ],
-    "nextActions": [
-      "implement code",
-      "run tests",
-      "validate against acceptance criteria"
-    ]
-  }
-}
-```
-
-## Runtime State Storage
-
-Autopilot keeps runtime state out of the repository by default. Objective state, recent history, permission mode, run cards, checkpoints, and final digests are stored under:
-
-```text
-~/.local/share/opencode/opencode-autopilot/projects/<project-key>/state.json
-```
-
-`<project-key>` is a readable project slug plus a stable hash of the repository path, so different repositories do not collide.
-
-Repo-local `.autopilot/state.json` is treated as a legacy fallback: if user-data state does not exist yet, autopilot can still read the old file. New writes go to the user-data location.
-
-If OpenCode or the plugin restarts while an objective run is active, Autopilot recovers the run card in a paused state instead of replaying an autonomous prompt immediately. Review `/autopilot status`, then run `/autopilot resume` when it is safe to continue.
-
-Config fields:
-
-| Field | Purpose |
-|---|---|
-| `promptInjection.system` | Adds repo-specific hints to the autopilot system prompt. |
-| `promptInjection.continuation` | Adds hints to continuation prompts. |
-| `promptInjection.validation` | Adds hints to validation checkpoints. |
-| `promptInjection.compaction` | Adds hints to compaction context. |
-| `directiveRules.blockedPatterns` | Adds literal phrases that should block continuation. |
-| `directiveRules.highImpactPatterns` | Adds literal phrases that should stop for user input. |
-| `workflow` | Adds structured workflow reminders to compaction context. |
-
-## Agent-Facing Details
-
-You are right that some instructions can look like they belong in an agent prompt rather than a README. The agent-facing behavior is intentionally kept in these files:
-
-| File | Audience |
-|---|---|
-| `.opencode/commands/autopilot.md` | Slash-command argument interpretation for OpenCode agents. |
-| `prompts/system-prompt.ts` | Runtime autonomy guidance injected into agent context. |
-| `prompts/continuation.ts` | Continuation, validation, and plan-step prompts. |
-| `prompts/directives.ts` | Internal status marker parsing and fallback directive inference. |
-
-The README should stay human-facing: install, configure, use, and develop the plugin.
-
-## Architecture
-
-The plugin uses OpenCode hooks to add autonomy guidance, manage permissions, preserve state during compaction, and drive objective-run continuations.
-
-| Hook / Surface | Purpose |
-|---|---|
-| `tool.autopilot` | Enables/disables autopilot, reports status, or starts an objective run. |
-| `permission.ask` | Applies `limited` or `allow-all` permission policy while autopilot is enabled. |
-| `experimental.chat.system.transform` | Injects autonomy guidance into the active agent context. |
-| `chat.message` | Tracks the pending agent so delegated prompts are scoped to the worker. |
-| `experimental.session.compacting` | Preserves autopilot state and recent events across compaction. |
-| `event` | Watches session/message events and continues objective runs on `session.idle`. |
-| `tool.execute.after` | Cleans internal autopilot markers from autopilot tool output. |
+Wingman files are manual in v2. To use a preset, copy the desired
+`.opencode/agents/*.md` file into the project or register the agent yourself.
 
 ## Development
 
 ```bash
 bun install
-bun run typecheck
-bun test ./__tests__/
-bun run lint
+bun run check
+bun test
 bun run build
 ```
 
-## Repository Layout
+## Manual Smoke Test
 
-```text
-index.ts                    # package entry point
-plugin.ts                   # OpenCode plugin factory and continuation controller
-config/                     # optional .autopilot/config loading
-hooks/                      # OpenCode hook handlers
-prompts/                    # prompt builders, directives, status formatting
-state/                      # state factory, persistence, session cache
-tools/                      # autopilot tool, plan parsing, planning inference
-types/                      # shared runtime types
-__tests__/                  # unit/integration tests
-__tests__/e2e/              # opt-in behavioral PTY/simulation tests
-```
+1. Run `bun install`, `bun run build` in this repository.
+2. In a test project, add the local plugin path to `opencode.jsonc`:
 
-## License
+   ```jsonc
+   {
+     "plugins": ["/absolute/path/to/opencode-autopilot"]
+   }
+   ```
 
-MIT
+3. Start `opencode2` in the test project.
+4. Run `/autopilot on`, then `/autopilot status`. Confirm the notice toast and
+   status dialog appear.
+5. Run `/autopilot <small objective> --max=1` and confirm the first worker
+   prompt starts without a follow-up prompt.
